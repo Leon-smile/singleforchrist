@@ -3,7 +3,7 @@ import 'package:mobileappsfc/downloadservice.dart';
 import 'package:mobileappsfc/song.dart';
 import 'package:mobileappsfc/songs.dart';
 
-enum AppRoute { home, search, library, addLyrics, share, lyrics }
+enum AppRoute { signIn, home, search, library, addLyrics, share, lyrics }
 
 /// One entry in the "Recent searches" list.
 /// [kind] is 'song', 'singer', 'playlist' or 'query'.
@@ -35,8 +35,15 @@ class AppState extends ChangeNotifier {
   /// Shared by the top-bar search and the page-level search fields.
   final TextEditingController search = TextEditingController();
 
+  /// The app opens on the home page. The Sign in page is a prototype only:
+  /// reach it from the avatar menu, or set this to AppRoute.signIn to start
+  /// there.
   AppRoute _route = AppRoute.home;
   AppRoute get route => _route;
+
+  /// Prototype only: there is no real authentication yet.
+  void signIn() => go(AppRoute.home);
+  void signOut() => go(AppRoute.signIn);
 
   final List<Song> playlist = [
     songById('slow-pulse'),
@@ -164,6 +171,7 @@ class AppState extends ChangeNotifier {
       allSongs.where((s) => !playlist.any((p) => p.id == s.id)).toList();
 
   AppRoute get parentRoute => switch (_route) {
+    AppRoute.signIn => AppRoute.signIn,
     AppRoute.home => AppRoute.home,
     AppRoute.search => AppRoute.home,
     AppRoute.library => AppRoute.home,

@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:mobileappsfc/app_state.dart';
-import 'package:mobileappsfc/logo.dart';
 import 'package:mobileappsfc/song.dart';
 import 'package:mobileappsfc/songs.dart';
-
 import '../theme.dart';
 import 'artwork.dart';
+import 'logo.dart';
 
 /// Width at which the layout switches from phone to desktop.
 const kDesktopBreakpoint = 900.0;
@@ -53,15 +52,24 @@ class AvatarBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const CircleAvatar(
-      radius: 16,
-      backgroundColor: AppColors.accent,
-      child: Text(
-        'A',
-        style: TextStyle(
-          color: Colors.black,
-          fontWeight: FontWeight.w700,
-          fontSize: 13,
+    return PopupMenuButton<String>(
+      tooltip: 'Account',
+      color: AppColors.surfaceHigh,
+      padding: EdgeInsets.zero,
+      onSelected: (_) => AppScope.of(context).signOut(),
+      itemBuilder: (_) => const [
+        PopupMenuItem(value: 'out', child: Text('Sign out')),
+      ],
+      child: const CircleAvatar(
+        radius: 16,
+        backgroundColor: AppColors.accent,
+        child: Text(
+          'A',
+          style: TextStyle(
+            color: Colors.black,
+            fontWeight: FontWeight.w700,
+            fontSize: 13,
+          ),
         ),
       ),
     );

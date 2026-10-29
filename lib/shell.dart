@@ -7,6 +7,7 @@ import 'package:mobileappsfc/homepage.dart';
 import 'package:mobileappsfc/library.dart';
 import 'package:mobileappsfc/search_page.dart';
 import 'package:mobileappsfc/share_page.dart';
+import 'package:mobileappsfc/signinpage.dart';
 
 /// Chooses phone vs desktop chrome and shows the page for the current route.
 class AppShell extends StatelessWidget {
@@ -15,11 +16,16 @@ class AppShell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = AppScope.of(context);
+
+    // The Sign in page is full screen: no sidebar, top bar or bottom nav.
+    if (state.route == AppRoute.signIn) return const SignInPage();
+
     return LayoutBuilder(
       builder: (context, box) {
         final desktop = box.maxWidth >= kDesktopBreakpoint;
         final Widget page = switch (state.route) {
           AppRoute.home => HomePage(desktop: desktop),
+          AppRoute.signIn => const SizedBox.shrink(), // handled above
           AppRoute.search => SearchPage(desktop: desktop),
           AppRoute.library => LibraryPage(desktop: desktop),
           AppRoute.addLyrics => AddLyricsPage(desktop: desktop),
