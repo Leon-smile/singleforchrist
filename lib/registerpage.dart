@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:mobileappsfc/Theme.dart';
 import 'package:mobileappsfc/app_state.dart';
+import 'package:mobileappsfc/service/authservice.dart';
 import 'package:mobileappsfc/common.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show AuthException;
 
 /// ---------------------------------------------------------------------------
 /// Design tokens
@@ -234,6 +236,7 @@ class _SignUpFormState extends State<_SignUpForm> {
 
   bool _obscure = true;
   bool _agreed = false;
+  bool _loading = false;
   int _strength = 0;
 
   @override
@@ -263,9 +266,9 @@ class _SignUpFormState extends State<_SignUpForm> {
     return score;
   }
 
-  void _submit() {
-    final valid = _formKey.currentState?.validate() ?? false;
-    if (!valid) return;
+  Future<void> _submit() async {
+    if (_loading) return;
+    if (!(_formKey.currentState?.validate() ?? false)) return;
     if (!_agreed) {
       showToast(
         context,
@@ -273,11 +276,41 @@ class _SignUpFormState extends State<_SignUpForm> {
       );
       return;
     }
-    // TODO: replace with your real sign-up call (Supabase / Firebase).
-    showToast(context, 'Welcome to Sonora, ${_name.text.trim()}!');
-    AppScope.of(context).signIn();
-    // Close the register page (and anything above the root) after signing in.
-    Navigator.of(context).popUntil((route) => route.isFirst);
+
+    setState(() => _loading = true);
+    try {
+      final res = await AuthService.signUp(
+        name: _name.text,
+        email: _email.text,
+        password: _password.text,
+      );
+      if (!mounted) return;
+
+      if (res.session != null) {
+        // Email confirmation is OFF in Supabase: the user is signed in now.
+        showToast(context, 'Welcome to Sonora, ${_name.text.trim()}!');
+        AppScope.of(context).signIn();
+        Navigator.of(context).popUntil((route) => route.isFirst);
+      } else {
+        // Email confirmation is ON: ask the user to confirm, then sign in.
+        showToast(
+          context,
+          'Check your email to confirm your account, then sign in.',
+        );
+        Navigator.of(context).maybePop();
+      }
+    } on AuthException catch (e) {
+      if (mounted) showToast(context, e.message);
+    } catch (_) {
+      if (mounted) {
+        showToast(
+          context,
+          'Could not reach the server. Check your connection.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   @override
@@ -370,7 +403,10 @@ class _SignUpFormState extends State<_SignUpForm> {
           ),
           const SizedBox(height: 16),
 
-          _PrimaryButton(label: 'CREATE ACCOUNT', onPressed: _submit),
+          _PrimaryButton(
+            label: _loading ? 'CREATING...' : 'CREATE ACCOUNT',
+            onPressed: _loading ? null : _submit,
+          ),
           const SizedBox(height: 14),
 
           Center(
@@ -630,7 +666,7 @@ class _TermsRow extends StatelessWidget {
 class _PrimaryButton extends StatelessWidget {
   const _PrimaryButton({required this.label, required this.onPressed});
   final String label;
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
 
   @override
   Widget build(BuildContext context) {
@@ -652,7 +688,9 @@ class _PrimaryButton extends StatelessWidget {
           onPressed: onPressed,
           style: ElevatedButton.styleFrom(
             backgroundColor: SonoraColors.lime,
+            disabledBackgroundColor: SonoraColors.lime.withOpacity(0.5),
             foregroundColor: SonoraColors.background,
+            disabledForegroundColor: SonoraColors.background,
             elevation: 0,
             shape: const StadiumBorder(),
           ),

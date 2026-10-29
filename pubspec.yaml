@@ -15,7 +15,7 @@ dependencies:
   cupertino_icons: ^1.0.8
   google_fonts: ^8.2.1
   file_saver: ^0.2.14
-
+  supabase_flutter: ^2.0.0
 dev_dependencies:
   flutter_test:
     sdk: flutter

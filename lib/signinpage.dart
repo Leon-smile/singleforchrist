@@ -6,8 +6,10 @@ import 'package:mobileappsfc/artwork.dart';
 import 'package:mobileappsfc/common.dart';
 import 'package:mobileappsfc/logo.dart';
 import 'package:mobileappsfc/registerpage.dart';
+import 'package:mobileappsfc/service/authservice.dart';
 import 'package:mobileappsfc/song.dart';
 import 'package:mobileappsfc/songs.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Width at which the page shows the brand panel next to the form.
 const _wideBreakpoint = 900.0;
@@ -382,16 +384,25 @@ class _SignInCardState extends State<_SignInCard> {
                   ),
                 ),
                 TextButton(
-                  onPressed: () =>
-                      showToast(context, 'Password reset is coming soon'),
-                  child: const Text(
-                    'Forgot password?',
-                    style: TextStyle(
-                      color: AppColors.accent,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
+                  onPressed: () async {
+                    final email = _id.text.trim();
+                    if (!email.contains('@')) {
+                      showToast(context, 'Enter your email first');
+                      return;
+                    }
+                    try {
+                      await AuthService.resetPassword(email);
+                      if (context.mounted) {
+                        showToast(
+                          context,
+                          'Reset link sent. Check your email.',
+                        );
+                      }
+                    } on AuthException catch (e) {
+                      if (context.mounted) showToast(context, e.message);
+                    }
+                  },
+                  child: const Text('Forgot password?'),
                 ),
               ],
             ),
