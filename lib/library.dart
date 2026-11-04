@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:mobileappsfc/Theme.dart';
 import 'package:mobileappsfc/app_state.dart';
 import 'package:mobileappsfc/common.dart';
 import 'package:mobileappsfc/song.dart';
+import '../theme.dart';
 
 /// "Your library": the After hours playlist.
 class LibraryPage extends StatelessWidget {
@@ -13,6 +13,7 @@ class LibraryPage extends StatelessWidget {
     final q = state.search.text.trim().toLowerCase();
     if (q.isEmpty) return state.playlist;
     return state.playlist
+        .whereType<Song>()
         .where(
           (s) =>
               s.title.toLowerCase().contains(q) ||
@@ -292,11 +293,17 @@ class _PlaylistSongCard extends StatelessWidget {
       onSelected: (value) {
         if (value == 'download') {
           runAction(context, () => state.downloadSong(song));
+        } else if (value == 'share') {
+          state.go(AppRoute.share);
+          state.selected
+            ..clear()
+            ..add(song.id);
         } else {
           state.removeFromPlaylist(song);
         }
       },
       itemBuilder: (_) => const [
+        PopupMenuItem(value: 'share', child: Text('Share lyrics')),
         PopupMenuItem(value: 'download', child: Text('Download lyrics')),
         PopupMenuItem(value: 'remove', child: Text('Remove from playlist')),
       ],
@@ -305,7 +312,7 @@ class _PlaylistSongCard extends StatelessWidget {
     final lines = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        for (final line in song.lines)
+        for (final line in song.previewLines.take(4))
           Padding(
             padding: const EdgeInsets.only(top: 3),
             child: Text(
@@ -366,7 +373,7 @@ class _PlaylistSongCard extends StatelessWidget {
                 Row(
                   children: [
                     Text(
-                      '${song.lines.length} lines',
+                      '${song.lineCount} lines',
                       style: const TextStyle(
                         color: AppColors.muted,
                         fontSize: 11,

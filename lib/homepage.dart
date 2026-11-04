@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:mobileappsfc/Theme.dart';
 import 'package:mobileappsfc/app_state.dart';
 import 'package:mobileappsfc/artwork.dart';
 import 'package:mobileappsfc/common.dart';
 import 'package:mobileappsfc/song.dart';
 import 'package:mobileappsfc/songs.dart';
+import '../theme.dart';
 
 enum HomeFilter { all, singers, lyrics }
 
@@ -433,7 +433,7 @@ class _FeaturedCard extends StatelessWidget {
                         children: [
                           Expanded(
                             child: Text(
-                              '${song.singer.toUpperCase()} · ${song.lines.length} lines',
+                              '${song.singer.toUpperCase()} · ${song.lineCount} lines',
                               style: const TextStyle(
                                 color: AppColors.muted,
                                 fontSize: 10,

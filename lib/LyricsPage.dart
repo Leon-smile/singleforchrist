@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:mobileappsfc/app_state.dart';
 import 'package:mobileappsfc/artwork.dart';
 import 'package:mobileappsfc/common.dart';
+import 'package:mobileappsfc/share_page.dart';
 import 'package:mobileappsfc/song.dart';
 
 import '../theme.dart';
@@ -35,13 +36,20 @@ class LyricsPage extends StatelessWidget {
           children: [
             Flexible(child: _AddButton(song: song)),
             const SizedBox(width: 8),
-            OutlineAction(
-              icon: Icons.download_outlined,
-              tooltip: 'Download lyrics',
-              onTap: () => runAction(context, () => state.downloadSong(song)),
+            _DownloadButton(song: song),
+            const SizedBox(width: 8),
+            _ShareButton(song: song),
+          ],
+        ),
+        const SizedBox(height: 14),
+        const Row(
+          children: [
+            Text(
+              'Text size',
+              style: TextStyle(color: AppColors.muted, fontSize: 12),
             ),
-            const Spacer(),
-            const _FontControls(),
+            Spacer(),
+            _FontControls(),
           ],
         ),
         const SizedBox(height: 24),
@@ -110,7 +118,7 @@ class LyricsPage extends StatelessWidget {
                     ),
                     const SizedBox(height: 16),
                     Text(
-                      '${song.minutes} min read · ${song.lines.length} lines',
+                      '${song.minutes} min read · ${song.lineCount} lines',
                       style: const TextStyle(
                         color: AppColors.muted,
                         fontSize: 12,
@@ -119,12 +127,9 @@ class LyricsPage extends StatelessWidget {
                     const SizedBox(height: 14),
                     _AddButton(song: song, expand: true),
                     const SizedBox(height: 10),
-                    OutlineAction(
-                      icon: Icons.download_outlined,
-                      label: 'Download lyrics',
-                      onTap: () =>
-                          runAction(context, () => state.downloadSong(song)),
-                    ),
+                    _DownloadButton(song: song, label: 'Download lyrics'),
+                    const SizedBox(height: 10),
+                    _ShareButton(song: song, label: 'Share lyrics'),
                     const SizedBox(height: 18),
                     const Row(
                       children: [
@@ -209,7 +214,7 @@ class _SongHero extends StatelessWidget {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    '${song.minutes} min read · ${song.lines.length} lines',
+                    '${song.minutes} min read · ${song.lineCount} lines',
                     style: const TextStyle(
                       color: AppColors.muted,
                       fontSize: 11,
@@ -236,18 +241,126 @@ class _LyricsBody extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         for (final line in song.lines)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: Text(
-              line,
-              style: TextStyle(
-                fontSize: fontSize,
-                fontWeight: FontWeight.w600,
-                height: 1.4,
+          if (line.trim().isEmpty)
+            // Blank line between verses
+            SizedBox(height: fontSize * 0.9)
+          else
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Text(
+                line,
+                style: TextStyle(
+                  fontSize: fontSize,
+                  fontWeight: FontWeight.w600,
+                  height: 1.4,
+                ),
               ),
+            ),
+        if (song.isOnline)
+          const Padding(
+            padding: EdgeInsets.only(top: 16),
+            child: Text(
+              'Lyrics from LRCLIB (community-contributed).',
+              style: TextStyle(color: AppColors.muted, fontSize: 11),
             ),
           ),
       ],
+    );
+  }
+}
+
+/// Rounded outline pill look, used as the child of a popup menu.
+class _PillBody extends StatelessWidget {
+  final IconData icon;
+  final String? label;
+  const _PillBody({required this.icon, this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: label == null ? 13 : 18,
+        vertical: 13,
+      ),
+      decoration: const ShapeDecoration(
+        color: AppColors.surface,
+        shape: StadiumBorder(side: BorderSide(color: AppColors.outline)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 18),
+          if (label != null) ...[
+            const SizedBox(width: 6),
+            Text(
+              label!,
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Download: one tap for .txt, or a small menu when the song also has
+/// time-synced (.lrc) lyrics.
+class _DownloadButton extends StatelessWidget {
+  final Song song;
+  final String? label;
+  const _DownloadButton({required this.song, this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    final state = AppScope.of(context);
+
+    if (song.syncedLyrics == null) {
+      return OutlineAction(
+        icon: Icons.download_outlined,
+        label: label,
+        tooltip: 'Download lyrics',
+        onTap: () => runAction(context, () => state.downloadSong(song)),
+      );
+    }
+
+    return PopupMenuButton<String>(
+      tooltip: 'Download',
+      color: AppColors.surfaceHigh,
+      padding: EdgeInsets.zero,
+      onSelected: (value) => runAction(
+        context,
+        () => value == 'lrc'
+            ? state.downloadSongLrc(song)
+            : state.downloadSong(song),
+      ),
+      itemBuilder: (_) => const [
+        PopupMenuItem(value: 'txt', child: Text('Lyrics (.txt)')),
+        PopupMenuItem(value: 'lrc', child: Text('Synced lyrics (.lrc)')),
+      ],
+      child: _PillBody(icon: Icons.download_outlined, label: label),
+    );
+  }
+}
+
+/// Opens the phone's share sheet with this song's lyrics.
+class _ShareButton extends StatelessWidget {
+  final Song song;
+  final String? label;
+  const _ShareButton({required this.song, this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    // Builder: the share sheet is anchored to the button itself (iPad / web).
+    return Builder(
+      builder: (ctx) => OutlineAction(
+        icon: Icons.ios_share_rounded,
+        label: label,
+        tooltip: 'Share lyrics',
+        onTap: () => runAction(
+          ctx,
+          () => shareLyricsText(ctx, heading: song.title, songs: [song]),
+        ),
+      ),
     );
   }
 }

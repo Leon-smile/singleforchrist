@@ -3,7 +3,8 @@ import 'package:mobileappsfc/Theme.dart';
 import 'package:mobileappsfc/app_state.dart';
 import 'package:mobileappsfc/service/authservice.dart';
 import 'package:mobileappsfc/common.dart';
-import 'package:supabase_flutter/supabase_flutter.dart' show AuthException;
+import 'package:supabase_flutter/supabase_flutter.dart'
+    show AuthException, PostgrestException;
 
 /// ---------------------------------------------------------------------------
 /// Design tokens
@@ -33,6 +34,7 @@ class _Breakpoints {
 /// Page
 /// ---------------------------------------------------------------------------
 /// Register screen. Opened from the Sign in page's "Sign up" link.
+/// The only thing the user types is their name.
 class SignUpPage extends StatelessWidget {
   const SignUpPage({super.key});
 
@@ -78,6 +80,7 @@ class _FormScroller extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       padding: EdgeInsets.symmetric(
         horizontal: horizontalPadding,
         vertical: 12,
@@ -219,10 +222,10 @@ class _BrandPanel extends StatelessWidget {
 }
 
 /// ---------------------------------------------------------------------------
-/// Form
+/// Form (name only)
 /// ---------------------------------------------------------------------------
 class _SignUpForm extends StatefulWidget {
-  const _SignUpForm({super.key});
+  const _SignUpForm();
 
   @override
   State<_SignUpForm> createState() => _SignUpFormState();
@@ -231,76 +234,37 @@ class _SignUpForm extends StatefulWidget {
 class _SignUpFormState extends State<_SignUpForm> {
   final _formKey = GlobalKey<FormState>();
   final _name = TextEditingController();
-  final _email = TextEditingController();
-  final _password = TextEditingController();
-
-  bool _obscure = true;
-  bool _agreed = false;
   bool _loading = false;
-  int _strength = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    _password.addListener(() {
-      final s = _calcStrength(_password.text);
-      if (s != _strength) setState(() => _strength = s);
-    });
-  }
 
   @override
   void dispose() {
     _name.dispose();
-    _email.dispose();
-    _password.dispose();
     super.dispose();
-  }
-
-  int _calcStrength(String v) {
-    if (v.isEmpty) return 0;
-    var score = 0;
-    if (v.length >= 8) score++;
-    if (RegExp(r'[a-z]').hasMatch(v) && RegExp(r'[A-Z]').hasMatch(v)) score++;
-    if (RegExp(r'\d').hasMatch(v)) score++;
-    if (RegExp(r'[^A-Za-z0-9]').hasMatch(v)) score++;
-    return score;
   }
 
   Future<void> _submit() async {
     if (_loading) return;
     if (!(_formKey.currentState?.validate() ?? false)) return;
-    if (!_agreed) {
-      showToast(
-        context,
-        'Please accept the Terms of Service and Privacy Policy.',
-      );
-      return;
-    }
 
+    final name = _name.text.trim();
     setState(() => _loading = true);
     try {
-      final res = await AuthService.signUp(
-        name: _name.text,
-        email: _email.text,
-        password: _password.text,
-      );
+      await AuthService.signUpWithName(name);
       if (!mounted) return;
 
-      if (res.session != null) {
-        // Email confirmation is OFF in Supabase: the user is signed in now.
-        showToast(context, 'Welcome to Sonora, ${_name.text.trim()}!');
-        AppScope.of(context).signIn();
-        Navigator.of(context).popUntil((route) => route.isFirst);
-      } else {
-        // Email confirmation is ON: ask the user to confirm, then sign in.
-        showToast(
-          context,
-          'Check your email to confirm your account, then sign in.',
-        );
-        Navigator.of(context).maybePop();
-      }
+      showToast(context, 'Welcome, $name!');
+      AppScope.of(context).signIn();
+      // Close the register page (and anything above the root).
+      Navigator.of(context).popUntil((route) => route.isFirst);
     } on AuthException catch (e) {
       if (mounted) showToast(context, e.message);
+    } on PostgrestException {
+      if (mounted) {
+        showToast(
+          context,
+          'Your account could not be saved. Please try again.',
+        );
+      }
     } catch (_) {
       if (mounted) {
         showToast(
@@ -323,85 +287,25 @@ class _SignUpFormState extends State<_SignUpForm> {
           const _MembershipCard(),
           const SizedBox(height: 28),
 
-          const _FieldLabel('FULL NAME'),
+          const _FieldLabel('YOUR NAME'),
           _SonoraField(
             controller: _name,
             hint: 'E.g. Elena Rostova',
             icon: Icons.person_outline,
             keyboardType: TextInputType.name,
-            textInputAction: TextInputAction.next,
+            textCapitalization: TextCapitalization.words,
+            textInputAction: TextInputAction.done,
             autofillHints: const [AutofillHints.name],
-            validator: (v) => (v == null || v.trim().isEmpty)
-                ? 'Please enter your name'
-                : null,
-          ),
-          const SizedBox(height: 22),
-
-          const _FieldLabel('EMAIL ADDRESS'),
-          _SonoraField(
-            controller: _email,
-            hint: 'elena@sonora.fm',
-            icon: Icons.alternate_email,
-            keyboardType: TextInputType.emailAddress,
-            textInputAction: TextInputAction.next,
-            autofillHints: const [AutofillHints.email],
+            onSubmitted: (_) => _submit(),
             validator: (v) {
               final value = v?.trim() ?? '';
-              final ok = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(value);
-              return ok ? null : 'Enter a valid email address';
+              if (value.isEmpty) return 'Please enter your name';
+              if (value.length < 2) return 'Name is too short';
+              if (value.length > 40) return 'Name is too long (40 max)';
+              return null;
             },
           ),
-          const SizedBox(height: 22),
-
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: const [
-              _FieldLabel('CREATE PASSWORD'),
-              Padding(
-                padding: EdgeInsets.only(bottom: 8),
-                child: Text(
-                  'Min. 8 characters',
-                  style: TextStyle(
-                    color: SonoraColors.limeSoft,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          _SonoraField(
-            controller: _password,
-            hint: '••••••••••••',
-            icon: Icons.lock_outline,
-            obscure: _obscure,
-            textInputAction: TextInputAction.done,
-            autofillHints: const [AutofillHints.newPassword],
-            onSubmitted: (_) => _submit(),
-            suffix: IconButton(
-              onPressed: () => setState(() => _obscure = !_obscure),
-              tooltip: _obscure ? 'Show password' : 'Hide password',
-              icon: Icon(
-                _obscure
-                    ? Icons.visibility_off_outlined
-                    : Icons.visibility_outlined,
-                color: SonoraColors.limeSoft,
-                size: 20,
-              ),
-            ),
-            validator: (v) => (v == null || v.length < 8)
-                ? 'Use at least 8 characters'
-                : null,
-          ),
-          const SizedBox(height: 10),
-          _StrengthBar(level: _strength),
-          const SizedBox(height: 20),
-
-          _TermsRow(
-            value: _agreed,
-            onChanged: (v) => setState(() => _agreed = v ?? false),
-          ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 24),
 
           _PrimaryButton(
             label: _loading ? 'CREATING...' : 'CREATE ACCOUNT',
@@ -491,7 +395,7 @@ class _MembershipCard extends StatelessWidget {
           ),
           SizedBox(height: 8),
           Text(
-            'Join Sonora to save lyrics, sync playlists, and discover late-night poetic verses.',
+            'Just tell us your name to get started. No email or password needed.',
             style: TextStyle(
               color: SonoraColors.limeSoft,
               fontSize: 14,
@@ -530,10 +434,9 @@ class _SonoraField extends StatelessWidget {
     required this.controller,
     required this.hint,
     required this.icon,
-    this.obscure = false,
-    this.suffix,
     this.validator,
     this.keyboardType,
+    this.textCapitalization = TextCapitalization.none,
     this.textInputAction,
     this.autofillHints,
     this.onSubmitted,
@@ -542,10 +445,9 @@ class _SonoraField extends StatelessWidget {
   final TextEditingController controller;
   final String hint;
   final IconData icon;
-  final bool obscure;
-  final Widget? suffix;
   final String? Function(String?)? validator;
   final TextInputType? keyboardType;
+  final TextCapitalization textCapitalization;
   final TextInputAction? textInputAction;
   final Iterable<String>? autofillHints;
   final ValueChanged<String>? onSubmitted;
@@ -559,9 +461,9 @@ class _SonoraField extends StatelessWidget {
 
     return TextFormField(
       controller: controller,
-      obscureText: obscure,
       validator: validator,
       keyboardType: keyboardType,
+      textCapitalization: textCapitalization,
       textInputAction: textInputAction,
       autofillHints: autofillHints,
       onFieldSubmitted: onSubmitted,
@@ -571,7 +473,6 @@ class _SonoraField extends StatelessWidget {
         hintText: hint,
         hintStyle: const TextStyle(color: SonoraColors.muted),
         prefixIcon: Icon(icon, color: SonoraColors.limeSoft, size: 20),
-        suffixIcon: suffix,
         filled: true,
         fillColor: SonoraColors.field,
         contentPadding: const EdgeInsets.symmetric(
@@ -584,81 +485,6 @@ class _SonoraField extends StatelessWidget {
         errorBorder: border(Colors.redAccent),
         focusedErrorBorder: border(Colors.redAccent, 1.5),
       ),
-    );
-  }
-}
-
-class _StrengthBar extends StatelessWidget {
-  const _StrengthBar({required this.level});
-  final int level; // 0..4
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: List.generate(4, (i) {
-        final on = i < level;
-        return Expanded(
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 250),
-            height: 3,
-            margin: EdgeInsets.only(right: i == 3 ? 0 : 8),
-            decoration: BoxDecoration(
-              color: on ? SonoraColors.lime : SonoraColors.barOff,
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-        );
-      }),
-    );
-  }
-}
-
-class _TermsRow extends StatelessWidget {
-  const _TermsRow({required this.value, required this.onChanged});
-  final bool value;
-  final ValueChanged<bool?> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    const base = TextStyle(color: SonoraColors.text, fontSize: 13, height: 1.4);
-    const bold = TextStyle(fontWeight: FontWeight.w800);
-
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: 24,
-          height: 24,
-          child: Checkbox(
-            value: value,
-            onChanged: onChanged,
-            activeColor: SonoraColors.lime,
-            checkColor: SonoraColors.background,
-            side: const BorderSide(color: SonoraColors.muted, width: 1.5),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(5),
-            ),
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: GestureDetector(
-            onTap: () => onChanged(!value),
-            child: const Text.rich(
-              TextSpan(
-                style: base,
-                children: [
-                  TextSpan(text: "I agree to Sonora's "),
-                  TextSpan(text: 'Terms of Service', style: bold),
-                  TextSpan(text: ' and '),
-                  TextSpan(text: 'Privacy Policy', style: bold),
-                  TextSpan(text: '.'),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ],
     );
   }
 }

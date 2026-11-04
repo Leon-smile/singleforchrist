@@ -16,9 +16,18 @@ class Song {
   final String id;
   final String title;
   final String singer;
+
+  /// One entry per lyric line. Online lyrics keep empty strings between
+  /// verses so the reader shows the spacing.
   final List<String> lines;
   final List<Color> colors; // placeholder artwork gradient
   final int minutes;
+
+  /// Time-synced lyrics in LRC format (online lyrics only), or null.
+  final String? syncedLyrics;
+
+  /// 'sample' for the built-in songs, 'lrclib' for lyrics found online.
+  final String source;
 
   const Song({
     required this.id,
@@ -27,5 +36,17 @@ class Song {
     required this.lines,
     required this.colors,
     required this.minutes,
+    this.syncedLyrics,
+    this.source = 'lyrics.ovh',
   });
+
+  /// Number of lines with text (blank spacer lines are not counted).
+  int get lineCount => lines.where((l) => l.trim().isNotEmpty).length;
+
+  bool get isOnline => source != 'sample';
+
+  /// Lines that have text, without the blank spacer lines. Use this for
+  /// short previews on cards.
+  List<String> get previewLines =>
+      lines.where((l) => l.trim().isNotEmpty).toList();
 }

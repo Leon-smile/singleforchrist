@@ -5,6 +5,7 @@ import 'package:mobileappsfc/common.dart';
 import 'package:mobileappsfc/functions/add_lyrics.dart';
 import 'package:mobileappsfc/homepage.dart';
 import 'package:mobileappsfc/library.dart';
+import 'package:mobileappsfc/registerpage.dart';
 import 'package:mobileappsfc/search_page.dart';
 import 'package:mobileappsfc/share_page.dart';
 import 'package:mobileappsfc/signinpage.dart';
@@ -17,15 +18,16 @@ class AppShell extends StatelessWidget {
   Widget build(BuildContext context) {
     final state = AppScope.of(context);
 
-    // The Sign in page is full screen: no sidebar, top bar or bottom nav.
+    // Sign in and Create account are full screen: no sidebar, top bar or
+    // bottom nav.
     if (state.route == AppRoute.signIn) return const SignInPage();
+    if (state.route == AppRoute.signUp) return const SignUpPage();
 
     return LayoutBuilder(
       builder: (context, box) {
         final desktop = box.maxWidth >= kDesktopBreakpoint;
         final Widget page = switch (state.route) {
           AppRoute.home => HomePage(desktop: desktop),
-          AppRoute.signIn => const SizedBox.shrink(), // handled above
           AppRoute.search => SearchPage(desktop: desktop),
           AppRoute.library => LibraryPage(desktop: desktop),
           AppRoute.addLyrics => AddLyricsPage(desktop: desktop),
@@ -34,6 +36,8 @@ class AppShell extends StatelessWidget {
             key: ValueKey(state.currentSong.id),
             desktop: desktop,
           ),
+          // Handled above, kept so the switch stays exhaustive.
+          AppRoute.signIn || AppRoute.signUp => const SizedBox.shrink(),
         };
 
         if (desktop) {

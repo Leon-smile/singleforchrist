@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:mobileappsfc/Theme.dart';
 import 'package:mobileappsfc/app_state.dart';
 import 'package:mobileappsfc/artwork.dart';
 import 'package:mobileappsfc/common.dart';
 import 'package:mobileappsfc/song.dart';
 import 'package:mobileappsfc/songs.dart';
+
+import '../theme.dart';
 
 enum _SearchFilter { all, lyrics, singers, playlists, verses }
 
@@ -95,14 +96,18 @@ class _SearchPageState extends State<SearchPage> {
   // ---------------------------------------------------------------- actions
 
   void _openSong(AppState state, Song song) {
-    state.addRecent(
-      RecentSearch(
-        kind: 'song',
-        refId: song.id,
-        title: song.title,
-        subtitle: 'Song · ${song.singer}',
-      ),
-    );
+    // Online songs are not in the built-in list, so they can't be reopened
+    // from "Recent searches". Only remember the built-in ones.
+    if (!song.isOnline) {
+      state.addRecent(
+        RecentSearch(
+          kind: 'song',
+          refId: song.id,
+          title: song.title,
+          subtitle: 'Song · ${song.singer}',
+        ),
+      );
+    }
     state.openSong(song);
   }
 
@@ -423,8 +428,19 @@ class _SearchPageState extends State<SearchPage> {
           ]
         : <(Song, String)>[];
 
+    // Online lyrics (LRCLIB) are searched as you type, for 2+ characters.
+    final showOnline = showLyrics && q.length >= 2;
+    final online = showOnline ? state.remoteResults : const <Song>[];
+    final onlineHasContent =
+        showOnline &&
+        (state.remoteLoading || online.isNotEmpty || state.remoteError != null);
+
     final empty =
-        songs.isEmpty && singers.isEmpty && !playlistHit && verses.isEmpty;
+        songs.isEmpty &&
+        singers.isEmpty &&
+        !playlistHit &&
+        verses.isEmpty &&
+        !onlineHasContent;
     if (empty) {
       return [
         const Padding(
@@ -456,6 +472,82 @@ class _SearchPageState extends State<SearchPage> {
             child: _ResultRow(
               title: s.title,
               subtitle: 'Song · ${s.singer}',
+              colors: s.colors,
+              onTap: () => _openSong(state, s),
+            ),
+          ),
+      ],
+      if (onlineHasContent) ...[
+        Padding(
+          padding: const EdgeInsets.only(top: 6, bottom: 10),
+          child: Row(
+            children: [
+              const Text(
+                'Online lyrics',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(width: 8),
+              const Text(
+                'via lyrics.ovh',
+                style: TextStyle(color: AppColors.muted, fontSize: 10),
+              ),
+              const Spacer(),
+              if (state.remoteLoading)
+                const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: AppColors.accent,
+                  ),
+                ),
+            ],
+          ),
+        ),
+        if (state.remoteError != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    state.remoteError!,
+                    style: const TextStyle(
+                      color: AppColors.muted,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+                InkWell(
+                  onTap: state.retryRemote,
+                  child: const Text(
+                    'Try again',
+                    style: TextStyle(
+                      color: AppColors.accent,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        if (!state.remoteLoading && state.remoteError == null && online.isEmpty)
+          const Padding(
+            padding: EdgeInsets.only(bottom: 8),
+            child: Text(
+              'No online lyrics found.',
+              style: TextStyle(color: AppColors.muted, fontSize: 12),
+            ),
+          ),
+        for (final s in online)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: _ResultRow(
+              title: s.title,
+              subtitle: s.syncedLyrics == null
+                  ? 'Song · ${s.singer}'
+                  : 'Song · ${s.singer} · Synced',
               colors: s.colors,
               onTap: () => _openSong(state, s),
             ),
@@ -721,7 +813,7 @@ class _TrendingCard extends StatelessWidget {
                 children: [
                   Expanded(
                     child: Text(
-                      'Ready to sing · ${song.lines.length} lines',
+                      'Ready to sing · ${song.lineCount} lines',
                       style: const TextStyle(
                         color: AppColors.muted,
                         fontSize: 10,

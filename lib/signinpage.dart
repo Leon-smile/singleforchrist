@@ -210,34 +210,57 @@ class _SignInCard extends StatefulWidget {
 
 class _SignInCardState extends State<_SignInCard> {
   final _formKey = GlobalKey<FormState>();
-  final _id = TextEditingController();
-  final _pw = TextEditingController();
-  final _pwFocus = FocusNode();
-
-  bool _obscure = true;
-  bool _remember = true;
+  final _name = TextEditingController();
   bool _loading = false;
 
   @override
   void dispose() {
-    _id.dispose();
-    _pw.dispose();
-    _pwFocus.dispose();
+    _name.dispose();
     super.dispose();
   }
 
+  /// Name-only sign in. Accounts are created without a password, so the
+  /// name is checked against the account saved on this device.
   Future<void> _submit() async {
-    if (_loading || !_formKey.currentState!.validate()) return;
+    if (_loading) return;
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+
+    final typed = _name.text.trim();
     setState(() => _loading = true);
+    try {
+      final saved = await AuthService.savedName();
+      if (!mounted) return;
 
-    // Prototype: pretend to check the account. Replace with Supabase /
-    // Firebase sign-in here.
-    await Future<void>.delayed(const Duration(milliseconds: 600));
-    if (!mounted) return;
+      if (saved == null) {
+        showToast(
+          context,
+          'No account found on this device. Tap "Sign up" to create one.',
+        );
+        return;
+      }
+      if (saved.trim().toLowerCase() != typed.toLowerCase()) {
+        showToast(context, "That name doesn't match this device's account.");
+        return;
+      }
 
-    showToast(context, 'Welcome back!');
-    setState(() => _loading = false);
-    AppScope.of(context).signIn();
+      showToast(context, 'Welcome back, $saved!');
+      AppScope.of(context).signIn();
+    } on AuthException catch (e) {
+      if (mounted) showToast(context, e.message);
+    } on PostgrestException {
+      if (mounted) {
+        showToast(context, 'Could not load your account. Please try again.');
+      }
+    } catch (_) {
+      if (mounted) {
+        showToast(
+          context,
+          'Could not reach the server. Check your connection.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   InputDecoration _decoration({
@@ -304,109 +327,35 @@ class _SignInCardState extends State<_SignInCard> {
             ),
             const SizedBox(height: 8),
             const Text(
-              'Sign in to access your saved lyrics and playlists.',
+              'Enter your name to open your saved lyrics and playlists.',
               textAlign: TextAlign.center,
               style: TextStyle(color: AppColors.muted, fontSize: 13),
             ),
             const SizedBox(height: 20),
             _RecentlySynced(song: song),
             const SizedBox(height: 22),
-            const _Label('Email or Username'),
+            const _Label('Your name'),
             const SizedBox(height: 8),
             TextFormField(
-              controller: _id,
-              keyboardType: TextInputType.emailAddress,
-              textInputAction: TextInputAction.next,
-              autofillHints: const [AutofillHints.username],
-              onFieldSubmitted: (_) => _pwFocus.requestFocus(),
-              decoration: _decoration(
-                hint: 'listener@sfclyrics.app',
-                icon: Icons.mail_outline_rounded,
-              ),
-              validator: (v) => (v == null || v.trim().length < 3)
-                  ? 'Enter your email or username'
-                  : null,
-            ),
-            const SizedBox(height: 16),
-            const _Label('Password'),
-            const SizedBox(height: 8),
-            TextFormField(
-              controller: _pw,
-              focusNode: _pwFocus,
-              obscureText: _obscure,
+              controller: _name,
+              keyboardType: TextInputType.name,
+              textCapitalization: TextCapitalization.words,
               textInputAction: TextInputAction.done,
-              autofillHints: const [AutofillHints.password],
+              autofillHints: const [AutofillHints.name],
               onFieldSubmitted: (_) => _submit(),
               decoration: _decoration(
-                hint: 'Enter your password',
-                icon: Icons.lock_outline_rounded,
-                suffix: IconButton(
-                  tooltip: _obscure ? 'Show password' : 'Hide password',
-                  onPressed: () => setState(() => _obscure = !_obscure),
-                  icon: Icon(
-                    _obscure
-                        ? Icons.visibility_off_outlined
-                        : Icons.visibility_outlined,
-                    size: 20,
-                    color: AppColors.muted,
-                  ),
-                ),
+                hint: 'E.g. Elena Rostova',
+                icon: Icons.person_outline_rounded,
               ),
-              validator: (v) => (v == null || v.length < 6)
-                  ? 'Password must be at least 6 characters'
-                  : null,
+              validator: (v) {
+                final value = v?.trim() ?? '';
+                if (value.isEmpty) return 'Please enter your name';
+                if (value.length < 2) return 'Name is too short';
+                if (value.length > 40) return 'Name is too long (40 max)';
+                return null;
+              },
             ),
-            const SizedBox(height: 14),
-            Row(
-              children: [
-                SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: Checkbox(
-                    value: _remember,
-                    activeColor: AppColors.accent,
-                    checkColor: Colors.black,
-                    side: const BorderSide(color: AppColors.muted),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(5),
-                    ),
-                    onChanged: (v) => setState(() => _remember = v ?? false),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: GestureDetector(
-                    onTap: () => setState(() => _remember = !_remember),
-                    child: const Text(
-                      'Remember me',
-                      style: TextStyle(fontSize: 13),
-                    ),
-                  ),
-                ),
-                TextButton(
-                  onPressed: () async {
-                    final email = _id.text.trim();
-                    if (!email.contains('@')) {
-                      showToast(context, 'Enter your email first');
-                      return;
-                    }
-                    try {
-                      await AuthService.resetPassword(email);
-                      if (context.mounted) {
-                        showToast(
-                          context,
-                          'Reset link sent. Check your email.',
-                        );
-                      }
-                    } on AuthException catch (e) {
-                      if (context.mounted) showToast(context, e.message);
-                    }
-                  },
-                  child: const Text('Forgot password?'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
             PrimaryButton(
               expand: true,
               icon: _loading ? null : Icons.login_rounded,

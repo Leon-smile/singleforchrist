@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:mobileappsfc/app_state.dart';
 import 'package:mobileappsfc/song.dart';
 import 'package:mobileappsfc/songs.dart';
+
 import '../theme.dart';
 import 'artwork.dart';
 import 'logo.dart';
@@ -23,7 +24,7 @@ Future<void> runAction(
   Future<String> Function() action,
 ) async {
   final message = await action();
-  if (context.mounted) showToast(context, message);
+  if (message.isNotEmpty && context.mounted) showToast(context, message);
 }
 
 String countWord(int n) {

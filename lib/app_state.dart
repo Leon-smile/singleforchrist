@@ -1,9 +1,25 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:mobileappsfc/downloadservice.dart';
+import 'package:mobileappsfc/service/authservice.dart';
+import 'package:mobileappsfc/service/downloadservice.dart'
+    hide saveLyrics, buildLyricsText;
+import 'package:mobileappsfc/service/lyrics_service.dart';
 import 'package:mobileappsfc/song.dart';
 import 'package:mobileappsfc/songs.dart';
+import 'package:share_plus/share_plus.dart';
 
-enum AppRoute { signIn, home, search, library, addLyrics, share, lyrics }
+enum AppRoute {
+  signIn,
+  signUp,
+  home,
+  search,
+  library,
+  addLyrics,
+  share,
+  lyrics,
+}
 
 /// One entry in the "Recent searches" list.
 /// [kind] is 'song', 'singer', 'playlist' or 'query'.
@@ -25,6 +41,69 @@ class RecentSearch {
 class AppState extends ChangeNotifier {
   AppState() {
     search.addListener(notifyListeners);
+    search.addListener(_onSearchChanged);
+  }
+
+  // ------------------------------------------------------- online lyrics
+
+  // FIX: this used to be a local stub class (LrclibService) whose search()
+  // always returned null, so the real service was never called.
+  final LyricsOvhService _lyricsService = LyricsOvhService();
+  Timer? _debounce;
+  String _remoteQuery = '';
+
+  /// Results from the online lyrics search (Search page only).
+  List<Song> remoteResults = [];
+  bool remoteLoading = false;
+  String? remoteError;
+
+  void _clearRemote() {
+    _debounce?.cancel();
+    _remoteQuery = '';
+    if (remoteResults.isEmpty && !remoteLoading && remoteError == null) return;
+    remoteResults = [];
+    remoteLoading = false;
+    remoteError = null;
+    notifyListeners();
+  }
+
+  void _onSearchChanged() {
+    final q = search.text.trim();
+    if (_route != AppRoute.search || q.length < 2) {
+      _clearRemote();
+      return;
+    }
+    if (q == _remoteQuery) return;
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 600), () => _runRemote(q));
+  }
+
+  Future<void> _runRemote(String q) async {
+    _remoteQuery = q;
+    remoteLoading = true;
+    remoteError = null;
+    notifyListeners();
+    try {
+      final found = await _lyricsService.search(q);
+      if (_remoteQuery != q) return; // a newer search replaced this one
+      remoteResults = found;
+    } on LyricsServiceException catch (e) {
+      if (_remoteQuery != q) return;
+      remoteResults = [];
+      remoteError = e.message; // the real reason (busy, no connection, ...)
+    } catch (_) {
+      if (_remoteQuery != q) return;
+      remoteResults = [];
+      remoteError = "Couldn't reach the lyrics service.";
+    }
+    remoteLoading = false;
+    notifyListeners();
+  }
+
+  /// Search again right now (used by the "Try again" link).
+  void retryRemote() {
+    final q = search.text.trim();
+    if (q.length >= 2) _runRemote(q);
   }
 
   static const userName = 'Alex';
@@ -35,15 +114,18 @@ class AppState extends ChangeNotifier {
   /// Shared by the top-bar search and the page-level search fields.
   final TextEditingController search = TextEditingController();
 
-  /// The app opens on the home page. The Sign in page is a prototype only:
-  /// reach it from the avatar menu, or set this to AppRoute.signIn to start
-  /// there.
-  AppRoute _route = AppRoute.home;
+  /// Signed-out users start on the Sign in page. (main.dart calls signIn()
+  /// right away when Supabase restored a saved session.)
+  AppRoute _route = AppRoute.signIn;
   AppRoute get route => _route;
 
-  /// Prototype only: there is no real authentication yet.
   void signIn() => go(AppRoute.home);
-  void signOut() => go(AppRoute.signIn);
+
+  /// Signs out of Supabase and returns to the Sign in page.
+  void signOut() {
+    AuthService.signOut();
+    go(AppRoute.signIn);
+  }
 
   final List<Song> playlist = [
     songById('slow-pulse'),
@@ -172,6 +254,7 @@ class AppState extends ChangeNotifier {
 
   AppRoute get parentRoute => switch (_route) {
     AppRoute.signIn => AppRoute.signIn,
+    AppRoute.signUp => AppRoute.signIn,
     AppRoute.home => AppRoute.home,
     AppRoute.search => AppRoute.home,
     AppRoute.library => AppRoute.home,
@@ -225,6 +308,9 @@ class AppState extends ChangeNotifier {
   Future<String> downloadSong(Song song) =>
       saveLyrics(fileName: song.title, heading: song.title, songs: [song]);
 
+  /// Time-synced (.lrc) download; only for songs that have synced lyrics.
+  Future<String> downloadSongLrc(Song song) => saveLrc(song);
+
   Future<String> downloadAll() => saveLyrics(
     fileName: 'lyricflow-lyrics',
     heading: 'LyricFlow lyrics',
@@ -233,9 +319,29 @@ class AppState extends ChangeNotifier {
 
   @override
   void dispose() {
+    _debounce?.cancel();
     search.dispose();
     super.dispose();
   }
+
+  Future<String> shareLyricsText(
+    BuildContext ctx, {
+    required List<Song> songs,
+  }) async {
+    final heading = songs.length == 1 ? songs.first.title : playlistName;
+    final text = buildLyricsText(heading, songs);
+
+    try {
+      await Share.share(text, sharePositionOrigin: ctx.sharePositionOrigin);
+      return 'Lyrics shared';
+    } catch (_) {
+      return "Couldn't share the lyrics. Please try again.";
+    }
+  }
+}
+
+extension on BuildContext {
+  Rect? get sharePositionOrigin => null;
 }
 
 /// Makes [AppState] available to the whole widget tree.
