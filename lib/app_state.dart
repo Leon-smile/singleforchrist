@@ -6,6 +6,7 @@ import 'package:mobileappsfc/service/authservice.dart';
 import 'package:mobileappsfc/service/downloadservice.dart'
     hide saveLyrics, buildLyricsText;
 import 'package:mobileappsfc/service/lyrics_service.dart';
+import 'package:mobileappsfc/service/playlistservice.dart';
 import 'package:mobileappsfc/song.dart';
 import 'package:mobileappsfc/songs.dart';
 import 'package:share_plus/share_plus.dart';
@@ -119,20 +120,146 @@ class AppState extends ChangeNotifier {
   AppRoute _route = AppRoute.signIn;
   AppRoute get route => _route;
 
-  void signIn() => go(AppRoute.home);
+  /// Goes to the home page and loads this user's saved playlist.
+  void signIn() {
+    go(AppRoute.home);
+    loadPlaylist();
+  }
 
   /// Signs out of Supabase and returns to the Sign in page.
   void signOut() {
     AuthService.signOut();
+    _playlistId = null;
+    shareToken = null;
+    playlist.clear();
     go(AppRoute.signIn);
   }
 
-  final List<Song> playlist = [
-    songById('slow-pulse'),
-    songById('quiet-hours'),
-    songById('summer-nights'),
-    songById('wildflower'),
-  ];
+  // ------------------------------------------------- saved playlist (Supabase)
+
+  /// Songs of the signed-in user's playlist (loaded by [loadPlaylist]).
+  final List<Song> playlist = [];
+
+  String? _playlistId;
+  Future<String>? _ensuring;
+  bool playlistLoading = false;
+
+  /// Share code of the playlist, or null when it is not shared.
+  String? shareToken;
+
+  /// Last problem while saving to the server (null when everything is fine).
+  String? syncError;
+
+  Future<String> _ensurePlaylistId() {
+    final known = _playlistId;
+    if (known != null) return Future.value(known);
+    return _ensuring ??= () async {
+      try {
+        final info = await PlaylistService.ensurePlaylist(playlistName);
+        _playlistId = info.id;
+        shareToken = info.shareToken;
+        return info.id;
+      } finally {
+        _ensuring = null;
+      }
+    }();
+  }
+
+  /// Turns a saved row back into a [Song]. Built-in songs come from the
+  /// sample list; online songs get their lyrics fetched again.
+  Future<Song> _songFromSaved(SavedSong s) async {
+    if (s.source == 'sample') {
+      final match = allSongs.where((x) => x.id == s.songId).firstOrNull;
+      if (match != null) return match;
+    } else {
+      try {
+        final song = await _lyricsService.loadSong(
+          id: s.songId.replaceFirst('lyrics-ovh-', ''),
+          title: s.title,
+          artist: s.singer,
+        );
+        if (song != null) return song;
+      } catch (_) {
+        // fall through to the placeholder below
+      }
+    }
+    // Keep the song in the list even if its lyrics cannot load right now.
+    return Song(
+      id: s.songId,
+      title: s.title,
+      singer: s.singer,
+      lines: const ['Lyrics could not be loaded right now. Try again later.'],
+      colors: playlistColors,
+      minutes: 1,
+      source: s.source,
+    );
+  }
+
+  Future<void> loadPlaylist() async {
+    playlistLoading = true;
+    syncError = null;
+    notifyListeners();
+    try {
+      final id = await _ensurePlaylistId();
+      final saved = await PlaylistService.songs(id);
+      final songs = await Future.wait(saved.map(_songFromSaved));
+      playlist
+        ..clear()
+        ..addAll(songs);
+    } catch (e) {
+      debugPrint('Could not load the playlist: $e');
+      syncError = "Couldn't load your playlist. Check your connection.";
+    }
+    playlistLoading = false;
+    notifyListeners();
+  }
+
+  void _sync(Future<void> Function() job, {VoidCallback? onFail}) {
+    job().catchError((Object e) {
+      debugPrint('Playlist sync failed: $e');
+      onFail?.call();
+    });
+  }
+
+  // ----------------------------------------------------------- sharing
+
+  /// Turns sharing on (creates the code the first time) and returns it.
+  Future<String> startSharing() async {
+    final id = await _ensurePlaylistId();
+    final token = await PlaylistService.share(id);
+    shareToken = token;
+    notifyListeners();
+    return token;
+  }
+
+  /// Turns sharing off. The old code stops working.
+  Future<void> stopSharing() async {
+    final id = await _ensurePlaylistId();
+    await PlaylistService.stopSharing(id);
+    shareToken = null;
+    notifyListeners();
+  }
+
+  /// Text to send to a friend together with the code.
+  String shareInvite(String code) =>
+      'Open my "$playlistName" playlist in LyricFlow: go to Share > '
+      '"Open a shared playlist" and enter this code:\n\n$code';
+
+  /// Looks up a playlist by share code (null = no such playlist).
+  Future<SharedPlaylist?> fetchShared(String code) =>
+      PlaylistService.getShared(code);
+
+  /// Adds the songs of a shared playlist to my own playlist.
+  Future<int> copySharedToPlaylist(SharedPlaylist shared) async {
+    var added = 0;
+    for (final saved in shared.songs) {
+      final song = await _songFromSaved(saved);
+      if (isInPlaylist(song)) continue;
+      addToPlaylist(song);
+      added++;
+    }
+    return added;
+  }
 
   /// Ids picked on the Add lyrics page, not yet added.
   final Set<String> selected = {};
@@ -242,7 +369,22 @@ class AppState extends ChangeNotifier {
   void addToPlaylist(Song song) {
     if (isInPlaylist(song)) return;
     playlist.add(song);
+    syncError = null;
     notifyListeners();
+
+    final position = playlist.length;
+    _sync(
+      () async {
+        final id = await _ensurePlaylistId();
+        await PlaylistService.addSong(id, song, position);
+      },
+      onFail: () {
+        // Not saved: take it out again so the list tells the truth.
+        playlist.removeWhere((s) => s.id == song.id);
+        syncError = "Couldn't save \"${song.title}\". Please try again.";
+        notifyListeners();
+      },
+    );
   }
 
   // ------------------------------------------------------------ playlist
@@ -281,8 +423,10 @@ class AppState extends ChangeNotifier {
   /// Adds the selected songs to the playlist and returns how many were added.
   int addSelected() {
     final toAdd = candidates.where((s) => selected.contains(s.id)).toList();
-    playlist.addAll(toAdd);
     selected.clear();
+    for (final song in toAdd) {
+      addToPlaylist(song);
+    }
     notifyListeners();
     return toAdd.length;
   }
@@ -290,6 +434,10 @@ class AppState extends ChangeNotifier {
   void removeFromPlaylist(Song song) {
     playlist.removeWhere((s) => s.id == song.id);
     notifyListeners();
+    _sync(() async {
+      final id = await _ensurePlaylistId();
+      await PlaylistService.removeSong(id, song.id);
+    });
   }
 
   void setShareAccess(String value) {

@@ -870,6 +870,7 @@ class SongListRow extends StatelessWidget {
   const SongListRow({
     super.key,
     required this.song,
+
     required this.trailing,
     this.divider = false,
   });

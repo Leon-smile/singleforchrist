@@ -32,19 +32,13 @@ class _LyricFlowAppState extends State<LyricFlowApp> {
   void initState() {
     super.initState();
 
-    // Stay signed in: Supabase restores the saved session on startup, so skip
-    // the Sign in screen when there is one.
+    // Stay signed in: Supabase restores the saved session on startup (this
+    // also covers the return from Google's browser sign in on the web), so
+    // skip the Sign in screen when there is one.
     if (AuthService.isSignedIn) {
       _state.signIn();
+      AuthService.ensureGoogleProfile();
     }
-
-    // Optional: react to sign out (needs a sign-out method on AppState that
-    // sends the user back to AppRoute.signIn). Uncomment once you have it.
-    // AuthService.changes.listen((data) {
-    //   if (data.event == AuthChangeEvent.signedOut) {
-    //     _state.signOut();
-    //   }
-    // });
   }
 
   @override
@@ -59,7 +53,11 @@ class _LyricFlowAppState extends State<LyricFlowApp> {
       title: 'LyricFlow',
       debugShowCheckedModeBanner: false,
       theme: buildTheme(),
-      home: AppScope(state: _state, child: const AppShell()),
+      // AppScope sits ABOVE the Navigator, so pages opened with
+      // Navigator.push (Sign up) can also call AppScope.of(context).
+      builder: (context, child) =>
+          AppScope(state: _state, child: child ?? const SizedBox.shrink()),
+      home: const AppShell(),
     );
   }
 }

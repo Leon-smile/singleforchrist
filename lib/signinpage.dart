@@ -212,6 +212,7 @@ class _SignInCardState extends State<_SignInCard> {
   final _formKey = GlobalKey<FormState>();
   final _name = TextEditingController();
   bool _loading = false;
+  bool _googleLoading = false;
 
   @override
   void dispose() {
@@ -260,6 +261,36 @@ class _SignInCardState extends State<_SignInCard> {
       }
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  /// Google sign in (works on any device).
+  ///  * Phone: the account popup finishes here, so we move on right away.
+  ///  * Web: the page leaves for Google and reloads; main.dart's saved
+  ///    session check signs the user in after the reload.
+  Future<void> _google() async {
+    if (_loading || _googleLoading) return;
+    setState(() => _googleLoading = true);
+    try {
+      await AuthService.signInWithGoogle();
+      if (!mounted) return;
+
+      // isGoogleUser (not just isSignedIn): a leftover name-only session
+      // must not count when the user simply closed the Google popup.
+      if (AuthService.isGoogleUser) {
+        await AuthService.ensureGoogleProfile();
+        if (!mounted) return;
+        showToast(context, 'Welcome!');
+        AppScope.of(context).signIn();
+        Navigator.of(context).popUntil((route) => route.isFirst);
+      }
+    } on AuthException catch (e) {
+      if (mounted) showToast(context, e.message);
+    } catch (e) {
+      debugPrint('Google sign in error: $e');
+      if (mounted) showToast(context, 'Google sign in failed: $e');
+    } finally {
+      if (mounted) setState(() => _googleLoading = false);
     }
   }
 
@@ -363,6 +394,13 @@ class _SignInCardState extends State<_SignInCard> {
               onTap: _loading ? null : _submit,
             ),
             const SizedBox(height: 16),
+            const _OrDivider(),
+            const SizedBox(height: 16),
+            _GoogleButton(
+              loading: _googleLoading,
+              onPressed: _loading || _googleLoading ? null : _google,
+            ),
+            const SizedBox(height: 18),
             Wrap(
               alignment: WrapAlignment.center,
               crossAxisAlignment: WrapCrossAlignment.center,
@@ -479,6 +517,95 @@ class _RecentlySynced extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _OrDivider extends StatelessWidget {
+  const _OrDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    const line = Expanded(child: Divider(color: AppColors.outline, height: 1));
+    return const Row(
+      children: [
+        line,
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: 12),
+          child: Text(
+            'OR',
+            style: TextStyle(
+              color: AppColors.muted,
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1,
+            ),
+          ),
+        ),
+        line,
+      ],
+    );
+  }
+}
+
+/// "Continue with Google". Swap the "G" for Google's official logo asset
+/// before publishing (see Google's branding guidelines).
+class _GoogleButton extends StatelessWidget {
+  final bool loading;
+  final VoidCallback? onPressed;
+  const _GoogleButton({required this.loading, required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 50,
+      child: OutlinedButton(
+        onPressed: onPressed,
+        style: OutlinedButton.styleFrom(
+          foregroundColor: Colors.white,
+          side: const BorderSide(color: AppColors.outline),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            if (loading)
+              const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: AppColors.accent,
+                ),
+              )
+            else
+              Container(
+                width: 22,
+                height: 22,
+                alignment: Alignment.center,
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                ),
+                child: const Text(
+                  'G',
+                  style: TextStyle(
+                    color: Color(0xFF4285F4),
+                    fontSize: 14,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            const SizedBox(width: 10),
+            const Text(
+              'Continue with Google',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+            ),
+          ],
+        ),
       ),
     );
   }

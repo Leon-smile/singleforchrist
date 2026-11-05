@@ -23,10 +23,12 @@ class Song {
   final List<Color> colors; // placeholder artwork gradient
   final int minutes;
 
-  /// Time-synced lyrics in LRC format (online lyrics only), or null.
+  /// Time-synced lyrics in LRC format (not available from lyrics.ovh), or null.
   final String? syncedLyrics;
 
-  /// 'sample' for the built-in songs, 'lrclib' for lyrics found online.
+  /// 'sample' for the built-in songs, 'lyrics.ovh' for lyrics found online.
+  /// (The default is 'sample'. It used to be 'lyrics.ovh', which made every
+  /// built-in song count as an online song.)
   final String source;
 
   const Song({
@@ -37,7 +39,7 @@ class Song {
     required this.colors,
     required this.minutes,
     this.syncedLyrics,
-    this.source = 'lyrics.ovh',
+    this.source = 'sample',
   });
 
   /// Number of lines with text (blank spacer lines are not counted).

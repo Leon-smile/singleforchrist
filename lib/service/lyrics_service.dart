@@ -158,6 +158,18 @@ class LyricsOvhService {
     }
   }
 
+  /// Loads ONE song again from what a playlist saved (id, title, artist).
+  /// Null when its lyrics are not available right now.
+  Future<Song?> loadSong({
+    required String id, // without the "lyrics-ovh-" prefix
+    required String title,
+    required String artist,
+  }) async {
+    final lyrics = await getLyrics(artist: artist, title: title);
+    if (lyrics == null || lyrics.trim().isEmpty) return null;
+    return _toSong(_Candidate(id: id, title: title, artist: artist), lyrics);
+  }
+
   Song? _toSong(_Candidate c, String lyrics) {
     final lines = _tidy(lyrics);
     if (lines.isEmpty) return null;

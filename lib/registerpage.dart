@@ -236,6 +236,10 @@ class _SignUpFormState extends State<_SignUpForm> {
   final _name = TextEditingController();
   bool _loading = false;
 
+  /// Name the server said is taken (lower case), shown as a field error.
+  String? _takenName;
+  bool _googleLoading = false;
+
   @override
   void dispose() {
     _name.dispose();
@@ -246,7 +250,7 @@ class _SignUpFormState extends State<_SignUpForm> {
     if (_loading) return;
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
-    final name = _name.text.trim();
+    final name = AuthService.normalizeName(_name.text);
     setState(() => _loading = true);
     try {
       await AuthService.signUpWithName(name);
@@ -256,6 +260,11 @@ class _SignUpFormState extends State<_SignUpForm> {
       AppScope.of(context).signIn();
       // Close the register page (and anything above the root).
       Navigator.of(context).popUntil((route) => route.isFirst);
+    } on NameTakenException catch (e) {
+      if (!mounted) return;
+      setState(() => _takenName = name.toLowerCase());
+      _formKey.currentState?.validate(); // shows the red message on the field
+      showToast(context, e.message);
     } on AuthException catch (e) {
       if (mounted) showToast(context, e.message);
     } on PostgrestException {
@@ -274,6 +283,37 @@ class _SignUpFormState extends State<_SignUpForm> {
       }
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  /// Google sign in.
+  ///  * Phone: the account popup finishes here, so we move on right away.
+  ///  * Web: the page leaves for Google and reloads; main.dart's saved
+  ///    session check signs the user in after the reload.
+  Future<void> _google() async {
+    if (_loading || _googleLoading) return;
+    setState(() => _googleLoading = true);
+    try {
+      await AuthService.signInWithGoogle();
+      if (!mounted) return;
+
+      // isGoogleUser (not just isSignedIn): a leftover name-only session
+      // must not count when the user simply closed the Google popup.
+      if (AuthService.isGoogleUser) {
+        await AuthService.ensureGoogleProfile();
+        if (!mounted) return;
+        showToast(context, 'Welcome!');
+        AppScope.of(context).signIn();
+        // Close this Sign up page.
+        Navigator.of(context).popUntil((route) => route.isFirst);
+      }
+    } on AuthException catch (e) {
+      if (mounted) showToast(context, e.message);
+    } catch (e) {
+      debugPrint('Google sign in error: $e');
+      if (mounted) showToast(context, 'Google sign in failed: $e');
+    } finally {
+      if (mounted) setState(() => _googleLoading = false);
     }
   }
 
@@ -297,11 +337,17 @@ class _SignUpFormState extends State<_SignUpForm> {
             textInputAction: TextInputAction.done,
             autofillHints: const [AutofillHints.name],
             onSubmitted: (_) => _submit(),
+            onChanged: (_) {
+              if (_takenName != null) setState(() => _takenName = null);
+            },
             validator: (v) {
-              final value = v?.trim() ?? '';
+              final value = AuthService.normalizeName(v ?? '');
               if (value.isEmpty) return 'Please enter your name';
               if (value.length < 2) return 'Name is too short';
               if (value.length > 40) return 'Name is too long (40 max)';
+              if (_takenName != null && value.toLowerCase() == _takenName) {
+                return 'That name is already taken';
+              }
               return null;
             },
           ),
@@ -311,7 +357,14 @@ class _SignUpFormState extends State<_SignUpForm> {
             label: _loading ? 'CREATING...' : 'CREATE ACCOUNT',
             onPressed: _loading ? null : _submit,
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 18),
+          const _OrDivider(),
+          const SizedBox(height: 18),
+          _GoogleButton(
+            loading: _googleLoading,
+            onPressed: _loading || _googleLoading ? null : _google,
+          ),
+          const SizedBox(height: 18),
 
           Center(
             child: Wrap(
@@ -440,6 +493,7 @@ class _SonoraField extends StatelessWidget {
     this.textInputAction,
     this.autofillHints,
     this.onSubmitted,
+    this.onChanged,
   });
 
   final TextEditingController controller;
@@ -451,6 +505,7 @@ class _SonoraField extends StatelessWidget {
   final TextInputAction? textInputAction;
   final Iterable<String>? autofillHints;
   final ValueChanged<String>? onSubmitted;
+  final ValueChanged<String>? onChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -467,6 +522,7 @@ class _SonoraField extends StatelessWidget {
       textInputAction: textInputAction,
       autofillHints: autofillHints,
       onFieldSubmitted: onSubmitted,
+      onChanged: onChanged,
       cursorColor: SonoraColors.lime,
       style: const TextStyle(color: SonoraColors.text, fontSize: 15),
       decoration: InputDecoration(
@@ -535,6 +591,98 @@ class _PrimaryButton extends StatelessWidget {
               const Icon(Icons.arrow_forward, size: 18),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _OrDivider extends StatelessWidget {
+  const _OrDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    const line = Expanded(child: Divider(color: Color(0xFF2A302A), height: 1));
+    return const Row(
+      children: [
+        line,
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: 12),
+          child: Text(
+            'OR',
+            style: TextStyle(
+              color: SonoraColors.muted,
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1,
+            ),
+          ),
+        ),
+        line,
+      ],
+    );
+  }
+}
+
+/// "Continue with Google". Swap the "G" for Google's official logo asset
+/// before publishing (see Google's branding guidelines).
+class _GoogleButton extends StatelessWidget {
+  const _GoogleButton({required this.loading, required this.onPressed});
+  final bool loading;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      height: 54,
+      child: OutlinedButton(
+        onPressed: onPressed,
+        style: OutlinedButton.styleFrom(
+          foregroundColor: SonoraColors.text,
+          side: const BorderSide(color: Color(0xFF3A423A)),
+          shape: const StadiumBorder(),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            if (loading)
+              const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: SonoraColors.lime,
+                ),
+              )
+            else
+              Container(
+                width: 22,
+                height: 22,
+                alignment: Alignment.center,
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                ),
+                child: const Text(
+                  'G',
+                  style: TextStyle(
+                    color: Color(0xFF4285F4),
+                    fontSize: 14,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            const SizedBox(width: 10),
+            const Text(
+              'CONTINUE WITH GOOGLE',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.6,
+              ),
+            ),
+          ],
         ),
       ),
     );

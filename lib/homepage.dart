@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+
+import 'package:mobileappsfc/Theme.dart';
 import 'package:mobileappsfc/app_state.dart';
 import 'package:mobileappsfc/artwork.dart';
 import 'package:mobileappsfc/common.dart';
+import 'package:mobileappsfc/dailyversecard.dart';
 import 'package:mobileappsfc/song.dart';
 import 'package:mobileappsfc/songs.dart';
-import '../theme.dart';
 
 enum HomeFilter { all, singers, lyrics }
 
@@ -93,8 +95,8 @@ class _HomePageState extends State<HomePage> {
   Widget _mobile(AppState state) {
     final songs = _songs(state);
     final singers = _singers(state);
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+    final list = ListView(
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 88),
       children: [
         Row(
           children: [
@@ -121,7 +123,12 @@ class _HomePageState extends State<HomePage> {
         ),
         const SizedBox(height: 16),
         _chips(),
-        const SizedBox(height: 24),
+        const SizedBox(height: 16),
+        if (_showLyrics) ...[
+          const DailyVerseCard(),
+          const SizedBox(height: 24),
+        ] else
+          const SizedBox(height: 8),
         if (_showLyrics && songs.isNotEmpty) ...[
           const Text(
             'Recently read',
@@ -177,6 +184,29 @@ class _HomePageState extends State<HomePage> {
         ],
       ],
     );
+
+    // Round-cornered button at the bottom right, as in the design.
+    return Stack(
+      children: [
+        list,
+        Positioned(
+          right: 16,
+          bottom: 16,
+          child: FloatingActionButton(
+            heroTag: 'home-library',
+            tooltip: 'Your library',
+            backgroundColor: AppColors.accent,
+            foregroundColor: Colors.black,
+            elevation: 4,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+            onPressed: () => state.go(AppRoute.library),
+            child: const Icon(Icons.menu_book_rounded),
+          ),
+        ),
+      ],
+    );
   }
 
   // --------------------------------------------------------------- desktop
@@ -199,6 +229,13 @@ class _HomePageState extends State<HomePage> {
           const SizedBox(height: 16),
           _chips(),
           const SizedBox(height: 20),
+          if (_showLyrics) ...[
+            ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: 760),
+              child: DailyVerseCard(),
+            ),
+            const SizedBox(height: 24),
+          ],
           if (_showLyrics && songs.isNotEmpty) ...[
             GridView.builder(
               shrinkWrap: true,
