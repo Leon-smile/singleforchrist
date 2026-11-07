@@ -1,4 +1,4 @@
-<img width="720" height="1486" alt="download" src="https://github.com/user-attachments/assets/29a3b4a8-99ae-4834-859c-ca7b37e5fcf4" /><img width="720" height="1473" alt="download" src="https://github.com/user-attachments/assets/b388afd9-6c16-4b75-933c-2072a86d4807" /># SFC Lyrics
+# SFC Lyrics
 
 A Flutter app for reading, collecting and sharing worship lyrics, made for **Single for Christ**. Know the words. Share the song.
 
@@ -9,10 +9,9 @@ It runs on phone, tablet and web from one codebase, with a dark UI and a lime-gr
 ## Screenshots
 
 <p align="center">
-<img width="719" height="1486" alt="f0b58fc0-f497-4455-8e40-f31a19f10237" src="https://github.com/user-attachments/assets/4bbda7cd-4960-4d4e-b70b-47ffa30545c2" />
-<img width="720" height="1473" alt="download" src="https://github.com/user-attachments/assets/829ff565-2b1c-4fac-b4b0-0624a27e9d1c" />
-<img width="720" height="1486" alt="download" src="https://github.com/user-attachments/assets/47fb6ce9-89a0-484a-9553-c1dbf6b7a46e" />
-
+  <img src="https://github.com/user-attachments/assets/4bbda7cd-4960-4d4e-b70b-47ffa30545c2" width="230" alt="Home with Verse for today" />
+  <img src="https://github.com/user-attachments/assets/829ff565-2b1c-4fac-b4b0-0624a27e9d1c" width="230" alt="Search" />
+  <img src="https://github.com/user-attachments/assets/47fb6ce9-89a0-484a-9553-c1dbf6b7a46e" width="230" alt="Your playlist" />
 </p>
 
 ## Features
