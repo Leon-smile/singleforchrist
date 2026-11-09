@@ -4,10 +4,20 @@ A Flutter app for reading, collecting and sharing worship lyrics, made for **Sin
 
 It runs on phone, tablet and web from one codebase, with a dark UI and a lime-green accent. The layout switches automatically: a bottom navigation bar on phones, and a sidebar with a top bar on wide screens (900px and up).
 
-> **Status: prototype.** The screens and navigation work with sample data. There is no real backend yet, so sign in, sign up and sharing are simulated. See [Roadmap](#roadmap).
+> **Status: work in progress.** Accounts use Supabase (name only, or Google). Songs and playlists still use sample data. See [Roadmap](#roadmap).
+
+## Screenshots
+
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/4bbda7cd-4960-4d4e-b70b-47ffa30545c2" width="230" alt="Home with Verse for today" />
+  <img src="https://github.com/user-attachments/assets/829ff565-2b1c-4fac-b4b0-0624a27e9d1c" width="230" alt="Search" />
+  <img src="https://github.com/user-attachments/assets/47fb6ce9-89a0-484a-9553-c1dbf6b7a46e" width="230" alt="Your playlist" />
+</p>
 
 ## Features
 
+- **Verse for today**: a Bible verse (KJV) that changes every day, with Reflect, Save and Share.
+- **Online lyrics**: search and download lyrics from LRCLIB.
 - **Home**: greeting, All / Singers / Lyrics filters, recently read lyrics, a featured lyrics card and a singers row.
 - **Search**: recent searches, mood cards, trending lyrics, and live results filtered by Lyrics, Singers, Playlists or Verses.
 - **Lyrics reader**: full lyrics for a song, adjustable text size, add to playlist, download, and a "Next up" card.
@@ -15,7 +25,7 @@ It runs on phone, tablet and web from one codebase, with a dark UI and a lime-gr
 - **Add lyrics**: pick several songs and add them to the playlist in one go.
 - **Share playlist**: access setting and a copyable link.
 - **Download**: save lyrics as a `.txt` file (one song, a playlist, or everything).
-- **Sign in and Create account**: responsive forms with validation and a password strength meter.
+- **Sign in and Create account**: just type a name (names are unique), or continue with Google.
 - **Responsive**: phone, tablet and web layouts.
 
 ## Tech stack
@@ -26,6 +36,7 @@ It runs on phone, tablet and web from one codebase, with a dark UI and a lime-gr
 | UI | Material 3, custom dark theme |
 | Fonts | `google_fonts` |
 | File saving | `file_saver` |
+| Backend | Supabase (`supabase_flutter`), `google_sign_in` |
 | State | `ChangeNotifier` + `InheritedNotifier` (`AppState` / `AppScope`) |
 | Navigation | A route enum (`AppRoute`) switched in `AppShell` |
 
@@ -107,7 +118,7 @@ After adding or changing assets, restart the app (hot reload does not pick them 
 
 ## Roadmap
 
-- [ ] Supabase authentication (email sign up, sign in, sign out, password reset)
+- [x] Supabase authentication (name-only and Google)
 - [ ] Store songs, singers and playlists in Supabase instead of sample data
 - [ ] Real share links for playlists
 - [ ] Saved lyrics and per-user library
@@ -118,7 +129,9 @@ After adding or changing assets, restart the app (hot reload does not pick them 
 
 ## Notes
 
-- Sign in and Create account only validate the form, then open the app. Any valid email and a long enough password get in.
+- Name-only accounts are anonymous Supabase users with a unique name in the `profiles` table. Enable *Anonymous sign-ins* in Supabase.
+- Google sign in on Android needs an Android OAuth client in Google Cloud (package name and SHA-1).
+- Never commit your Supabase keys if you use a service key. The anon key is meant to be public, but keep Row Level Security on.
 - The sample lyrics are original placeholder text. Only add lyrics you have the right to use and share.
 
 ## License
