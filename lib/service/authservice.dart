@@ -18,56 +18,60 @@ class NameTakenException implements Exception {
 
 /// Thin wrapper around Supabase Auth so pages never touch the client directly.
 ///
-/// Two ways to get an account:
-///  * name only  -> anonymous Supabase user + a `profiles` row (unique name)
-///  * Google     -> real Supabase user, works on any device
+///  * Email + password -> real Supabase user (email confirmation supported)
+///  * Google           -> real Supabase user, works on any device
+///
+/// The `profiles` row is created by the `handle_new_user` database trigger.
 class AuthService {
   AuthService._();
 
   static SupabaseClient get _client => Supabase.instance.client;
 
-  /// Where Google sends the user back to on phones. Must match the Android /
-  /// iOS setup and the redirect URL added in the Supabase dashboard.
-  /// (Only used by the browser sign-in. The phone popup does not need it.)
   static const mobileRedirect =
       'https://gmukhkhkldbzivuhqzdd.supabase.co/auth/v1/callback';
 
-  /// The *Web application* OAuth client ID from Google Cloud (the same one
-  /// you pasted into Supabase > Authentication > Google).
   static const googleWebClientId =
       '1088965435374-afirgoru8mmdnqhfuctpl4vruebkg1o8.apps.googleusercontent.com';
-
-  /// Only needed for iPhone builds (the iOS OAuth client ID). Leave empty on
-  /// Android-only apps.
   static const googleIosClientId = '';
 
-  /// Current session (restored automatically from local storage on app start).
   static Session? get session => _client.auth.currentSession;
   static User? get user => _client.auth.currentUser;
   static bool get isSignedIn => session != null;
-
-  /// Fires on sign in, sign out, token refresh...
   static Stream<AuthState> get changes => _client.auth.onAuthStateChange;
+
+  // ------------------------------------------------------------- validation
+
+  static final _emailRe = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]{2,}$');
+
+  static String normalizeEmail(String email) => email.trim().toLowerCase();
+
+  static bool isValidEmail(String email) {
+    final e = normalizeEmail(email);
+    return e.length <= 254 && _emailRe.hasMatch(e);
+  }
+
+  /// Returns an error message, or null when the password is acceptable.
+  /// Keep in sync with the minimum length set in Supabase > Auth > Providers.
+  static String? passwordProblem(String password) {
+    if (password.length < 8) return 'Use at least 8 characters';
+    if (password.length > 72) return 'Password is too long (72 max)';
+    if (!RegExp(r'[A-Za-z]').hasMatch(password) ||
+        !RegExp(r'\d').hasMatch(password)) {
+      return 'Use letters and at least one number';
+    }
+    return null;
+  }
 
   // ------------------------------------------------------------------ Google
 
   static bool _isGoogle(User? u) => u?.appMetadata['provider'] == 'google';
-
-  /// True when the signed-in user came in through Google.
   static bool get isGoogleUser => _isGoogle(_client.auth.currentUser);
 
-  /// Phones use Google's own account picker (the "Choose an account" popup).
-  /// The web and desktop fall back to the browser sign-in page.
   static bool get _useNativeGoogle =>
       !kIsWeb &&
       (defaultTargetPlatform == TargetPlatform.android ||
           defaultTargetPlatform == TargetPlatform.iOS);
 
-  /// Signs in with Google.
-  ///  * Android / iOS: shows the "Choose an account" popup, then hands
-  ///    Google's ID token to Supabase.
-  ///  * Web / desktop: opens Google's sign-in page in the browser.
-  /// The result arrives through [changes] (event `signedIn`).
   static Future<void> signInWithGoogle() async {
     if (!_useNativeGoogle) {
       await _client.auth.signInWithOAuth(
@@ -87,11 +91,10 @@ class AuthService {
             : null,
       );
 
-      // Forget the last choice so the account popup always appears.
       await google.signOut();
 
-      final account = await google.signIn(); // <- the account popup
-      if (account == null) return; // the user closed the popup
+      final account = await google.signIn();
+      if (account == null) return;
 
       final auth = await account.authentication;
       final idToken = auth.idToken;
@@ -112,7 +115,7 @@ class AuthService {
     } on PlatformException catch (e) {
       final text = '${e.code} ${e.message} ${e.details}';
       if (text.contains('sign_in_canceled') || text.contains(': 12501')) {
-        return; // the user closed the popup
+        return;
       }
       if (text.contains('ApiException: 10')) {
         throw const AuthException(
@@ -136,47 +139,16 @@ class AuthService {
     }
   }
 
-  /// Makes sure a Google user has a row in `profiles` (name from Google).
-  /// Safe to call many times. Never throws: the profile is not needed to
-  /// use the app.
-  static Future<void> ensureGoogleProfile() async {
-    final u = _client.auth.currentUser;
-    if (u == null || !_isGoogle(u)) return;
-    try {
-      final existing = await _client
-          .from('profiles')
-          .select('id')
-          .eq('id', u.id)
-          .maybeSingle();
-      if (existing != null) return;
+  /// The database trigger now creates the profile row for Google users, so
+  /// there is nothing to insert from the app. Kept so existing callers
+  /// keep compiling.
+  static Future<void> ensureGoogleProfile() async {}
 
-      final meta = u.userMetadata ?? const <String, dynamic>{};
-      final raw =
-          (meta['full_name'] ??
-                  meta['name'] ??
-                  u.email?.split('@').first ??
-                  'Friend')
-              .toString();
-      final name = normalizeName(raw);
-      await _client.from('profiles').insert({
-        'id': u.id,
-        'full_name': name.isEmpty ? 'Friend' : name,
-        'provider': 'google',
-      });
-    } catch (_) {
-      // ignore: the app works without the profile row
-    }
-  }
+  // ------------------------------------------------------------------- name
 
-  // --------------------------------------------------------------- name only
-
-  /// Trims and collapses repeated spaces: "  Ana   Cruz " -> "Ana Cruz".
   static String normalizeName(String name) =>
       name.trim().replaceAll(RegExp(r'\s+'), ' ');
 
-  /// True when no name-only account uses [name] yet (case-insensitive).
-  /// Calls the `is_name_available` database function, so it also works
-  /// before the user is signed in.
   static Future<bool> isNameAvailable(String name) async {
     final res = await _client.rpc(
       'is_name_available',
@@ -185,53 +157,97 @@ class AuthService {
     return res == true;
   }
 
-  /// Creates the account from just a name.
+  // ------------------------------------------------------------------ email
+
+  /// Creates an account with email + password.
   ///
-  /// Throws [NameTakenException] when the name is already used.
-  /// Other failures surface as [AuthException] / [PostgrestException].
-  static Future<void> signUpWithName(String name) async {
-    final clean = normalizeName(name);
+  /// Returns true when the user is signed in right away, false when the
+  /// project requires email confirmation first (show "check your inbox").
+  ///
+  /// When the email is already registered and confirmation is on, Supabase
+  /// returns a user with no identities. We treat that exactly like a normal
+  /// sign up (returns false) so the screen never reveals which emails exist.
+  static Future<bool> signUpWithEmail({
+    required String name,
+    required String email,
+    required String password,
+  }) async {
+    final cleanName = normalizeName(name);
+    final cleanEmail = normalizeEmail(email);
 
-    // 1) Friendly early check, before any account is created.
-    if (!await isNameAvailable(clean)) throw const NameTakenException();
+    if (!await isNameAvailable(cleanName)) throw const NameTakenException();
 
-    // 2) Create the anonymous account.
-    final res = await _client.auth.signInAnonymously();
-    final newUser = res.user;
-    if (newUser == null) {
-      throw const AuthException('Could not create the account.');
-    }
+    final res = await _client.auth.signUp(
+      email: cleanEmail,
+      password: password,
+      data: {'full_name': cleanName}, // read by the handle_new_user trigger
+      emailRedirectTo: kIsWeb ? Uri.base.origin : null,
+    );
 
-    // 3) Save the name. The unique index in the database is the final
-    //    judge: if someone took the name a moment ago, Postgres answers
-    //    23505 for that index.
+    return res.session != null;
+  }
+
+  /// Email + password sign in. Throws [AuthException] with a friendly message.
+  static Future<void> signInWithEmail({
+    required String email,
+    required String password,
+  }) async {
     try {
-      await _client.from('profiles').upsert({
-        'id': newUser.id,
-        'full_name': clean,
-        'provider': 'name',
-      });
-    } on PostgrestException catch (e) {
-      await _client.auth.signOut(); // don't keep a half-made account
-      if (_isNameConflict(e)) throw const NameTakenException();
-      rethrow;
-    } catch (_) {
-      await _client.auth.signOut();
-      rethrow;
+      await _client.auth.signInWithPassword(
+        email: normalizeEmail(email),
+        password: password,
+      );
+    } on AuthException catch (e) {
+      if (e.code == 'email_not_confirmed') {
+        throw const AuthException(
+          'Please confirm your email first. Check your inbox.',
+        );
+      }
+      if (e.code == 'over_request_rate_limit' || e.statusCode == '429') {
+        throw const AuthException(
+          'Too many attempts. Please wait a minute and try again.',
+        );
+      }
+      // Same message for "no such user" and "wrong password".
+      throw const AuthException('Incorrect email or password.');
     }
   }
 
-  /// True only when the failure is the unique-name index, not some other
-  /// 23505 (for example the primary key on `id`).
-  static bool _isNameConflict(PostgrestException e) {
-    if (e.code != '23505') return false;
-    final text = '${e.message} ${e.details ?? ''}'.toLowerCase();
-    return text.contains('profiles_full_name_unique');
+  /// Sends a reset link. Callers should always show the same neutral message
+  /// afterwards, whether or not the email exists.
+  static Future<void> sendPasswordReset(String email) async {
+    await _client.auth.resetPasswordForEmail(
+      normalizeEmail(email),
+      redirectTo: kIsWeb ? Uri.base.origin : null,
+    );
+  }
+
+  static Future<void> resendConfirmation(String email) async {
+    await _client.auth.resend(
+      type: OtpType.signup,
+      email: normalizeEmail(email),
+    );
+  }
+
+  /// Confirms the 6-digit code from the sign-up email and signs the user in.
+  static Future<void> verifySignUpCode({
+    required String email,
+    required String code,
+  }) async {
+    await _client.auth.verifyOTP(
+      email: normalizeEmail(email),
+      token: code.trim(),
+      type: OtpType.signup,
+    );
+  }
+
+  /// Call after the user opens the reset link (event `passwordRecovery`).
+  static Future<void> updatePassword(String newPassword) async {
+    await _client.auth.updateUser(UserAttributes(password: newPassword));
   }
 
   // ------------------------------------------------------------------ shared
 
-  /// Name saved for the account signed in on this device (null if none).
   static Future<String?> savedName() async {
     final u = _client.auth.currentUser;
     if (u == null) return null;

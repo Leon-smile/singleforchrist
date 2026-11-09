@@ -34,7 +34,8 @@ class _Breakpoints {
 /// Page
 /// ---------------------------------------------------------------------------
 /// Register screen. Opened from the Sign in page's "Sign up" link.
-/// The only thing the user types is their name.
+/// Step 1: name + email + password.
+/// Step 2: type the 6-digit code that was emailed (when confirmation is on).
 class SignUpPage extends StatelessWidget {
   const SignUpPage({super.key});
 
@@ -222,7 +223,7 @@ class _BrandPanel extends StatelessWidget {
 }
 
 /// ---------------------------------------------------------------------------
-/// Form (name only)
+/// Form (name + email + password, then confirmation code)
 /// ---------------------------------------------------------------------------
 class _SignUpForm extends StatefulWidget {
   const _SignUpForm();
@@ -234,15 +235,26 @@ class _SignUpForm extends StatefulWidget {
 class _SignUpFormState extends State<_SignUpForm> {
   final _formKey = GlobalKey<FormState>();
   final _name = TextEditingController();
+  final _email = TextEditingController();
+  final _password = TextEditingController();
+  final _code = TextEditingController();
   bool _loading = false;
+  bool _obscure = true;
 
   /// Name the server said is taken (lower case), shown as a field error.
   String? _takenName;
   bool _googleLoading = false;
 
+  /// Set after sign up while we wait for the emailed 6-digit code.
+  String? _pendingEmail;
+  DateTime _resendAt = DateTime.now();
+
   @override
   void dispose() {
     _name.dispose();
+    _email.dispose();
+    _password.dispose();
+    _code.dispose();
     super.dispose();
   }
 
@@ -253,13 +265,25 @@ class _SignUpFormState extends State<_SignUpForm> {
     final name = AuthService.normalizeName(_name.text);
     setState(() => _loading = true);
     try {
-      await AuthService.signUpWithName(name);
+      final signedIn = await AuthService.signUpWithEmail(
+        name: name,
+        email: _email.text,
+        password: _password.text,
+      );
       if (!mounted) return;
 
-      showToast(context, 'Welcome, $name!');
-      AppScope.of(context).signIn();
-      // Close the register page (and anything above the root).
-      Navigator.of(context).popUntil((route) => route.isFirst);
+      if (signedIn) {
+        showToast(context, 'Welcome, $name!');
+        AppScope.of(context).signIn();
+        // Close the register page (and anything above the root).
+        Navigator.of(context).popUntil((route) => route.isFirst);
+      } else {
+        // Email confirmation is on: show the code screen.
+        setState(() {
+          _pendingEmail = AuthService.normalizeEmail(_email.text);
+          _resendAt = DateTime.now().add(const Duration(seconds: 30));
+        });
+      }
     } on NameTakenException catch (e) {
       if (!mounted) return;
       setState(() => _takenName = name.toLowerCase());
@@ -286,6 +310,55 @@ class _SignUpFormState extends State<_SignUpForm> {
     }
   }
 
+  Future<void> _verify() async {
+    final code = _code.text.trim();
+    if (_loading) return;
+    if (code.length < 6) {
+      showToast(context, 'Enter the 6-digit code from your email.');
+      return;
+    }
+    setState(() => _loading = true);
+    try {
+      await AuthService.verifySignUpCode(email: _pendingEmail!, code: code);
+      if (!mounted) return;
+      showToast(context, 'Email confirmed. Welcome!');
+      AppScope.of(context).signIn();
+      Navigator.of(context).popUntil((route) => route.isFirst);
+    } on AuthException {
+      if (mounted) showToast(context, 'That code is wrong or has expired.');
+    } catch (_) {
+      if (mounted) {
+        showToast(
+          context,
+          'Could not reach the server. Check your connection.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _resend() async {
+    if (DateTime.now().isBefore(_resendAt)) {
+      showToast(context, 'Please wait a few seconds before resending.');
+      return;
+    }
+    try {
+      await AuthService.resendConfirmation(_pendingEmail!);
+      _resendAt = DateTime.now().add(const Duration(seconds: 30));
+      if (mounted) showToast(context, 'A new code is on its way.');
+    } on AuthException catch (e) {
+      if (mounted) showToast(context, e.message);
+    } catch (_) {
+      if (mounted) {
+        showToast(
+          context,
+          'Could not reach the server. Check your connection.',
+        );
+      }
+    }
+  }
+
   /// Google sign in.
   ///  * Phone: the account popup finishes here, so we move on right away.
   ///  * Web: the page leaves for Google and reloads; main.dart's saved
@@ -297,14 +370,11 @@ class _SignUpFormState extends State<_SignUpForm> {
       await AuthService.signInWithGoogle();
       if (!mounted) return;
 
-      // isGoogleUser (not just isSignedIn): a leftover name-only session
-      // must not count when the user simply closed the Google popup.
       if (AuthService.isGoogleUser) {
         await AuthService.ensureGoogleProfile();
         if (!mounted) return;
         showToast(context, 'Welcome!');
         AppScope.of(context).signIn();
-        // Close this Sign up page.
         Navigator.of(context).popUntil((route) => route.isFirst);
       }
     } on AuthException catch (e) {
@@ -317,8 +387,64 @@ class _SignUpFormState extends State<_SignUpForm> {
     }
   }
 
+  Widget _buildVerify() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _MembershipCard(),
+        const SizedBox(height: 28),
+        Text(
+          'We sent a 6-digit code to $_pendingEmail.',
+          style: const TextStyle(color: SonoraColors.limeSoft, fontSize: 14),
+        ),
+        const SizedBox(height: 16),
+        const _FieldLabel('CONFIRMATION CODE'),
+        _SonoraField(
+          controller: _code,
+          hint: '123456',
+          icon: Icons.pin_outlined,
+          keyboardType: TextInputType.number,
+          textInputAction: TextInputAction.done,
+          autofillHints: const [AutofillHints.oneTimeCode],
+          onSubmitted: (_) => _verify(),
+        ),
+        const SizedBox(height: 24),
+        _PrimaryButton(
+          label: _loading ? 'CHECKING...' : 'CONFIRM',
+          onPressed: _loading ? null : _verify,
+        ),
+        const SizedBox(height: 12),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            TextButton(
+              onPressed: _resend,
+              child: const Text(
+                'Resend code',
+                style: TextStyle(color: SonoraColors.lime),
+              ),
+            ),
+            TextButton(
+              onPressed: () => setState(() {
+                _pendingEmail = null;
+                _code.clear();
+              }),
+              child: const Text(
+                'Change email',
+                style: TextStyle(color: SonoraColors.muted),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (_pendingEmail != null) return _buildVerify();
+
     return Form(
       key: _formKey,
       child: Column(
@@ -334,9 +460,8 @@ class _SignUpFormState extends State<_SignUpForm> {
             icon: Icons.person_outline,
             keyboardType: TextInputType.name,
             textCapitalization: TextCapitalization.words,
-            textInputAction: TextInputAction.done,
+            textInputAction: TextInputAction.next,
             autofillHints: const [AutofillHints.name],
-            onSubmitted: (_) => _submit(),
             onChanged: (_) {
               if (_takenName != null) setState(() => _takenName = null);
             },
@@ -350,6 +475,44 @@ class _SignUpFormState extends State<_SignUpForm> {
               }
               return null;
             },
+          ),
+          const SizedBox(height: 16),
+
+          const _FieldLabel('EMAIL'),
+          _SonoraField(
+            controller: _email,
+            hint: 'you@example.com',
+            icon: Icons.mail_outline,
+            keyboardType: TextInputType.emailAddress,
+            textInputAction: TextInputAction.next,
+            autofillHints: const [AutofillHints.email],
+            validator: (v) => AuthService.isValidEmail(v ?? '')
+                ? null
+                : 'Enter a valid email address',
+          ),
+          const SizedBox(height: 16),
+
+          const _FieldLabel('PASSWORD'),
+          _SonoraField(
+            controller: _password,
+            hint: 'At least 8 characters',
+            icon: Icons.lock_outline,
+            obscureText: _obscure,
+            textInputAction: TextInputAction.done,
+            autofillHints: const [AutofillHints.newPassword],
+            onSubmitted: (_) => _submit(),
+            suffix: IconButton(
+              tooltip: _obscure ? 'Show password' : 'Hide password',
+              icon: Icon(
+                _obscure
+                    ? Icons.visibility_off_outlined
+                    : Icons.visibility_outlined,
+                color: SonoraColors.muted,
+                size: 20,
+              ),
+              onPressed: () => setState(() => _obscure = !_obscure),
+            ),
+            validator: (v) => AuthService.passwordProblem(v ?? ''),
           ),
           const SizedBox(height: 24),
 
@@ -448,7 +611,7 @@ class _MembershipCard extends StatelessWidget {
           ),
           SizedBox(height: 8),
           Text(
-            'Just tell us your name to get started. No email or password needed.',
+            'Create your account with your name, email and a password.',
             style: TextStyle(
               color: SonoraColors.limeSoft,
               fontSize: 14,
@@ -494,6 +657,8 @@ class _SonoraField extends StatelessWidget {
     this.autofillHints,
     this.onSubmitted,
     this.onChanged,
+    this.obscureText = false,
+    this.suffix,
   });
 
   final TextEditingController controller;
@@ -506,6 +671,8 @@ class _SonoraField extends StatelessWidget {
   final Iterable<String>? autofillHints;
   final ValueChanged<String>? onSubmitted;
   final ValueChanged<String>? onChanged;
+  final bool obscureText;
+  final Widget? suffix;
 
   @override
   Widget build(BuildContext context) {
@@ -523,12 +690,16 @@ class _SonoraField extends StatelessWidget {
       autofillHints: autofillHints,
       onFieldSubmitted: onSubmitted,
       onChanged: onChanged,
+      obscureText: obscureText,
+      enableSuggestions: !obscureText,
+      autocorrect: !obscureText,
       cursorColor: SonoraColors.lime,
       style: const TextStyle(color: SonoraColors.text, fontSize: 15),
       decoration: InputDecoration(
         hintText: hint,
         hintStyle: const TextStyle(color: SonoraColors.muted),
         prefixIcon: Icon(icon, color: SonoraColors.limeSoft, size: 20),
+        suffixIcon: suffix,
         filled: true,
         fillColor: SonoraColors.field,
         contentPadding: const EdgeInsets.symmetric(
