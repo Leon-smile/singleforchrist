@@ -61,12 +61,12 @@ class AvatarBadge extends StatelessWidget {
       itemBuilder: (_) => const [
         PopupMenuItem(value: 'out', child: Text('Sign out')),
       ],
-      child: const CircleAvatar(
+      child: CircleAvatar(
         radius: 16,
         backgroundColor: AppColors.accent,
         child: Text(
-          'A',
-          style: TextStyle(
+          AppScope.of(context).userInitial,
+          style: const TextStyle(
             color: Colors.black,
             fontWeight: FontWeight.w700,
             fontSize: 13,
@@ -427,7 +427,7 @@ class PlaylistHero extends StatelessWidget {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    '${AppState.userName} · ${state.playlist.length} lyrics · '
+                    '${state.userName} · ${state.playlist.length} lyrics · '
                     '${state.singerCount} singers',
                     style: const TextStyle(
                       color: AppColors.muted,

@@ -2,13 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:mobileappsfc/Theme.dart';
 import 'package:mobileappsfc/app_state.dart';
-import 'package:mobileappsfc/artwork.dart';
 import 'package:mobileappsfc/common.dart';
 import 'package:mobileappsfc/logo.dart';
 import 'package:mobileappsfc/registerpage.dart';
 import 'package:mobileappsfc/service/authservice.dart';
-import 'package:mobileappsfc/song.dart';
-import 'package:mobileappsfc/songs.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Width at which the page shows the brand panel next to the form.
@@ -321,7 +318,6 @@ class _SignInCardState extends State<_SignInCard> {
 
   @override
   Widget build(BuildContext context) {
-    final song = allSongs.first;
     return Container(
       padding: const EdgeInsets.fromLTRB(22, 26, 22, 22),
       decoration: BoxDecoration(
@@ -362,9 +358,7 @@ class _SignInCardState extends State<_SignInCard> {
               textAlign: TextAlign.center,
               style: TextStyle(color: AppColors.muted, fontSize: 13),
             ),
-            const SizedBox(height: 20),
-            _RecentlySynced(song: song),
-            const SizedBox(height: 22),
+            const SizedBox(height: 28),
             const _Label('Your name'),
             const SizedBox(height: 8),
             TextFormField(
@@ -443,81 +437,6 @@ class _Label extends StatelessWidget {
     return Text(
       text,
       style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
-    );
-  }
-}
-
-class _RecentlySynced extends StatelessWidget {
-  final Song song;
-  const _RecentlySynced({required this.song});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceHigh,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        children: [
-          Artwork(colors: song.colors, radius: 6, size: 44),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'RECENTLY READ',
-                  style: TextStyle(
-                    color: AppColors.accent,
-                    fontSize: 9,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 0.6,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  song.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: AppColors.selectedTint,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: const Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.menu_book_rounded,
-                  size: 13,
-                  color: AppColors.accent,
-                ),
-                SizedBox(width: 5),
-                Text(
-                  'Lyrics ready',
-                  style: TextStyle(
-                    color: AppColors.accent,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

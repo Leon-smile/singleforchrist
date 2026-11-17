@@ -279,9 +279,9 @@ class _HomePageState extends State<HomePage> {
         ],
         if (_showSingers && singers.isNotEmpty) ...[
           const SizedBox(height: 28),
-          const Text(
-            'Singers for ${AppState.userName}',
-            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+          Text(
+            'Singers for ${state.userName}',
+            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 12),
           SizedBox(
@@ -342,7 +342,7 @@ class _HomePageState extends State<HomePage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '${_greeting()}, ${AppState.userName}',
+            '${_greeting()}, ${state.userName}',
             style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 16),
@@ -384,10 +384,13 @@ class _HomePageState extends State<HomePage> {
             const SizedBox(height: 32),
             Row(
               children: [
-                const Expanded(
+                Expanded(
                   child: Text(
-                    'Singers for ${AppState.userName}',
-                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
+                    'Singers for ${state.userName}',
+                    style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
                 TextButton(

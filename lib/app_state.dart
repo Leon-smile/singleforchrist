@@ -11,6 +11,7 @@ import 'package:mobileappsfc/song.dart';
 import 'package:mobileappsfc/song_repository.dart';
 import 'package:mobileappsfc/songs.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show Supabase;
 
 enum AppRoute {
   signIn,
@@ -150,7 +151,43 @@ class AppState extends ChangeNotifier {
     ];
   }
 
-  static const userName = 'Alex';
+  /// The signed-in user's full name from Supabase profiles.
+  String _fullName = '';
+
+  /// First name for the greeting.
+  String get userName {
+    final name = _fullName.trim();
+    return name.isEmpty ? 'you' : name.split(RegExp(r'\s+')).first;
+  }
+
+  /// First letter of the full name for the avatar.
+  String get userInitial {
+    final name = _fullName.trim();
+    return name.isEmpty
+        ? '?'
+        : String.fromCharCode(name.runes.first).toUpperCase();
+  }
+
+  /// Load the user's profile from Supabase.
+  Future<void> loadProfile() async {
+    final user = Supabase.instance.client.auth.currentUser;
+
+    if (user == null) return;
+
+    try {
+      final response = await Supabase.instance.client
+          .from('profiles')
+          .select('full_name')
+          .eq('id', user.id)
+          .maybeSingle();
+
+      _fullName = response?['full_name']?.toString() ?? '';
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Failed to load profile: $e');
+    }
+  }
+
   static const playlistName = 'After hours';
   static const playlistTagline = 'Words for late nights. Ready to sing.';
   static const shareLink = 'sfclyrics.app/p/after-hours-a7k2';
@@ -166,6 +203,7 @@ class AppState extends ChangeNotifier {
   /// Goes to the home page and loads this user's saved playlist.
   void signIn() {
     go(AppRoute.home);
+    loadProfile();
     loadPlaylist();
     loadDbSongs();
   }
