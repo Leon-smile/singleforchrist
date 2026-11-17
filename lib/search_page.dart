@@ -3,6 +3,7 @@ import 'package:mobileappsfc/app_state.dart';
 import 'package:mobileappsfc/artwork.dart';
 import 'package:mobileappsfc/common.dart';
 import 'package:mobileappsfc/song.dart';
+import 'package:mobileappsfc/song_repository.dart';
 import 'package:mobileappsfc/songs.dart';
 
 import '../theme.dart';
@@ -92,6 +93,35 @@ class _SearchPageState extends State<SearchPage> {
   _SearchFilter _filter = _SearchFilter.all;
   _Mood? _mood;
   bool _exploreAll = false;
+
+  /// Songs added by you, loaded from the Supabase `songs` table.
+  List<Song> _mySongs = const [];
+  bool _mySongsLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadMySongs();
+  }
+
+  Future<void> _loadMySongs() async {
+    setState(() => _mySongsLoading = true);
+    try {
+      final rows = await SongRepository.fetchAll();
+      if (!mounted) return;
+      setState(() {
+        _mySongs = rows.map(Song.fromRow).toList();
+        _mySongsLoading = false;
+      });
+    } catch (_) {
+      // Supabase not set up yet or offline: keep searching the built-in songs.
+      if (!mounted) return;
+      setState(() => _mySongsLoading = false);
+    }
+  }
+
+  /// Built-in songs plus the ones you added.
+  List<Song> get _searchable => [...allSongs, ..._mySongs];
 
   // ---------------------------------------------------------------- actions
 
@@ -190,6 +220,7 @@ class _SearchPageState extends State<SearchPage> {
         ..._results(state, q)
       else ...[
         ..._recentSection(state),
+        ..._mySongsSection(state),
         ..._moodSection(),
         ..._trendingSection(state),
       ],
@@ -284,6 +315,51 @@ class _SearchPageState extends State<SearchPage> {
           ),
         ),
       const SizedBox(height: 18),
+    ];
+  }
+
+  /// Songs you added with chords (Supabase). Hidden until there is one.
+  List<Widget> _mySongsSection(AppState state) {
+    if (_mySongs.isEmpty && !_mySongsLoading) return const [];
+    return [
+      Row(
+        children: [
+          const Expanded(
+            child: Text(
+              'Your songs',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+            ),
+          ),
+          if (_mySongsLoading)
+            const SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: AppColors.accent,
+              ),
+            )
+          else
+            InkWell(
+              onTap: _loadMySongs,
+              child: const Text(
+                'Refresh',
+                style: TextStyle(
+                  color: AppColors.accent,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+        ],
+      ),
+      const SizedBox(height: 10),
+      for (final s in _mySongs)
+        Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: _TrendingCard(song: s, onTap: () => _openSong(state, s)),
+        ),
+      const SizedBox(height: 12),
     ];
   }
 
@@ -408,7 +484,10 @@ class _SearchPageState extends State<SearchPage> {
         f == _SearchFilter.all || f == _SearchFilter.playlists;
     final showVerses = f == _SearchFilter.verses;
 
-    final songs = showLyrics ? allSongs.where(songMatch).toList() : <Song>[];
+    // Built-in songs plus the ones you added to Supabase.
+    final pool = _searchable;
+
+    final songs = showLyrics ? pool.where(songMatch).toList() : <Song>[];
     final singers = showSingers
         ? allSingers
               .where(
@@ -422,7 +501,7 @@ class _SearchPageState extends State<SearchPage> {
         showPlaylists && AppState.playlistName.toLowerCase().contains(q);
     final verses = showVerses
         ? [
-            for (final s in allSongs)
+            for (final s in pool)
               for (final l in s.lines)
                 if (l.toLowerCase().contains(q)) (s, l),
           ]
@@ -471,7 +550,9 @@ class _SearchPageState extends State<SearchPage> {
             padding: const EdgeInsets.only(bottom: 8),
             child: _ResultRow(
               title: s.title,
-              subtitle: 'Song · ${s.singer}',
+              subtitle: s.source == 'supabase'
+                  ? 'Your song · ${s.singer}'
+                  : 'Song · ${s.singer}',
               colors: s.colors,
               onTap: () => _openSong(state, s),
             ),

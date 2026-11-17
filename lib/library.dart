@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mobileappsfc/addsong.dart';
 import 'package:mobileappsfc/app_state.dart';
 import 'package:mobileappsfc/common.dart';
 import 'package:mobileappsfc/song.dart';
@@ -46,6 +47,14 @@ class LibraryPage extends StatelessWidget {
               icon: Icons.add_rounded,
               label: 'Add lyrics',
               onTap: () => state.go(AppRoute.addLyrics),
+            ),
+            const SizedBox(width: 8),
+            OutlineAction(
+              icon: Icons.library_music_outlined,
+              tooltip: 'Add song with chords',
+              onTap: () => Navigator.of(context)
+                  .push(MaterialPageRoute(builder: (_) => const AddSongPage()))
+                  .then((_) => state.loadDbSongs()),
             ),
             const SizedBox(width: 8),
             OutlineAction(
@@ -130,6 +139,16 @@ class LibraryPage extends StatelessWidget {
               ),
               const SizedBox(width: 12),
               OutlineAction(
+                icon: Icons.library_music_outlined,
+                label: 'Add song with chords',
+                onTap: () => Navigator.of(context)
+                    .push(
+                      MaterialPageRoute(builder: (_) => const AddSongPage()),
+                    )
+                    .then((_) => state.loadDbSongs()),
+              ),
+              const SizedBox(width: 12),
+              OutlineAction(
                 icon: Icons.share_outlined,
                 label: 'Share playlist',
                 onTap: () => state.go(AppRoute.share),
@@ -190,7 +209,7 @@ class LibraryPage extends StatelessWidget {
                 crossAxisCount: 2,
                 mainAxisSpacing: 16,
                 crossAxisSpacing: 16,
-                mainAxisExtent: 200,
+                mainAxisExtent: 220,
               ),
               itemBuilder: (_, i) =>
                   _PlaylistSongCard(song: songs[i], desktop: true),
@@ -267,6 +286,50 @@ class _EmptyNote extends StatelessWidget {
           'No lyrics to show',
           style: TextStyle(color: AppColors.muted),
         ),
+      ),
+    );
+  }
+}
+
+/// Key / capo / tempo chips shown on each song card.
+///
+/// Requires these fields on [Song] (song.dart):
+///   String? originalKey;  int capo = 0;  int? tempo;
+class _SongMeta extends StatelessWidget {
+  final Song song;
+  const _SongMeta({required this.song});
+
+  @override
+  Widget build(BuildContext context) {
+    final chips = <String>[
+      if (song.originalKey != null) 'Key ${song.originalKey}',
+      if (song.capo > 0) 'Capo ${song.capo}',
+      if (song.tempo != null) '${song.tempo} BPM',
+    ];
+    if (chips.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Wrap(
+        spacing: 6,
+        runSpacing: 4,
+        children: [
+          for (final c in chips)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: AppColors.selectedTint,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                c,
+                style: const TextStyle(
+                  color: AppColors.accent,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -367,6 +430,7 @@ class _PlaylistSongCard extends StatelessWidget {
                     SizedBox(width: 32, height: 32, child: menu),
                   ],
                 ),
+                _SongMeta(song: song),
                 const SizedBox(height: 8),
                 lines,
                 const Spacer(),
@@ -426,6 +490,7 @@ class _PlaylistSongCard extends StatelessWidget {
                     SizedBox(width: 32, height: 32, child: menu),
                   ],
                 ),
+                _SongMeta(song: song),
                 const SizedBox(height: 8),
                 lines,
               ],

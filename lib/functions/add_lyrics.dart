@@ -23,9 +23,20 @@ class _AddLyricsPageState extends State<AddLyricsPage> {
   // Placeholder for "saved" lyrics until a real saved list exists.
   static const _savedIds = {'echoes', 'paper-planes', 'morning-light'};
 
+  // The database songs live in AppState (loaded at sign-in).
+  AppState get _s => AppScope.of(context);
+  List<Song> get _dbSongs => _s.dbSongs;
+  bool get _dbLoading => _s.dbLoading;
+  String? get _dbError => _s.dbError;
+  Future<void> _loadDb() => _s.loadDbSongs();
+
+  /// Everything that can be picked: database songs first, then the built-in
+  /// suggestions. Songs already in the playlist are left out.
+  List<Song> _pool(AppState state) => state.candidates;
+
   List<Song> _suggestions(AppState state) {
     final q = state.search.text.trim().toLowerCase();
-    var list = state.candidates.where((s) {
+    var list = _pool(state).where((s) {
       return q.isEmpty ||
           s.title.toLowerCase().contains(q) ||
           s.singer.toLowerCase().contains(q) ||
@@ -65,6 +76,50 @@ class _AddLyricsPageState extends State<AddLyricsPage> {
             onTap: () => setState(() => _tab = t),
           ),
       ],
+    );
+  }
+
+  /// Small status line for the database songs: loading, error or refresh.
+  Widget _dbStatus() {
+    if (!_dbLoading && _dbError == null && _dbSongs.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              _dbError ??
+                  (_dbLoading
+                      ? 'Loading your songs...'
+                      : '${_dbSongs.length} from your song database'),
+              style: const TextStyle(color: AppColors.muted, fontSize: 11),
+            ),
+          ),
+          if (_dbLoading)
+            const SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: AppColors.accent,
+              ),
+            )
+          else
+            InkWell(
+              onTap: _loadDb,
+              child: Text(
+                _dbError == null ? 'Refresh' : 'Try again',
+                style: const TextStyle(
+                  color: AppColors.accent,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 
@@ -218,6 +273,7 @@ class _AddLyricsPageState extends State<AddLyricsPage> {
                 ],
               ),
               const SizedBox(height: 12),
+              _dbStatus(),
               _cards(state, songs),
               const SizedBox(height: 16),
               _alreadyIn(state),
@@ -255,9 +311,9 @@ class _AddLyricsPageState extends State<AddLyricsPage> {
   Widget _desktop(AppState state) {
     final songs = _suggestions(state);
     final count = state.selected.length;
-    final picked = state.candidates
-        .where((s) => state.selected.contains(s.id))
-        .toList();
+    final picked = _pool(
+      state,
+    ).where((s) => state.selected.contains(s.id)).toList();
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(28, 4, 28, 32),
@@ -315,6 +371,7 @@ class _AddLyricsPageState extends State<AddLyricsPage> {
                       ],
                     ),
                     const SizedBox(height: 12),
+                    _dbStatus(),
                     _cards(state, songs),
                     const SizedBox(height: 16),
                     _alreadyIn(state),
@@ -350,11 +407,31 @@ class _SelectableCard extends StatelessWidget {
     required this.onTap,
   });
 
+  /// "Key G · Capo 1 · 72 BPM" for songs that have those details.
+  String? get _meta {
+    final parts = <String>[
+      if (song.originalKey != null) 'Key ${song.originalKey}',
+      if (song.capo > 0) 'Capo ${song.capo}',
+      if (song.tempo != null) '${song.tempo} BPM',
+    ];
+    return parts.isEmpty ? null : parts.join(' · ');
+  }
+
   @override
   Widget build(BuildContext context) {
+    final meta = _meta;
     final preview = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (meta != null)
+          Text(
+            meta,
+            style: const TextStyle(
+              color: AppColors.accent,
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
         for (final line in song.lines.take(2))
           Padding(
             padding: const EdgeInsets.only(top: 2),

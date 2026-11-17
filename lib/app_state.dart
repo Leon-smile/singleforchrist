@@ -8,6 +8,7 @@ import 'package:mobileappsfc/service/downloadservice.dart'
 import 'package:mobileappsfc/service/lyrics_service.dart';
 import 'package:mobileappsfc/service/playlistservice.dart';
 import 'package:mobileappsfc/song.dart';
+import 'package:mobileappsfc/song_repository.dart';
 import 'package:mobileappsfc/songs.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -107,6 +108,29 @@ class AppState extends ChangeNotifier {
     if (q.length >= 2) _runRemote(q);
   }
 
+  // ------------------------------------------- your songs (Supabase `songs`)
+
+  /// Songs you added with chords (Supabase `songs` table).
+  List<Song> dbSongs = [];
+  bool dbLoading = false;
+  String? dbError;
+
+  /// Loads (or reloads) the songs from the `songs` table.
+  Future<void> loadDbSongs() async {
+    dbLoading = true;
+    dbError = null;
+    notifyListeners();
+    try {
+      final rows = await SongRepository.fetchAll();
+      dbSongs = rows.map(Song.fromRow).toList();
+    } catch (e) {
+      debugPrint('Could not load songs: $e');
+      dbError = "Couldn't load your songs.";
+    }
+    dbLoading = false;
+    notifyListeners();
+  }
+
   static const userName = 'Alex';
   static const playlistName = 'After hours';
   static const playlistTagline = 'Words for late nights. Ready to sing.';
@@ -124,6 +148,7 @@ class AppState extends ChangeNotifier {
   void signIn() {
     go(AppRoute.home);
     loadPlaylist();
+    loadDbSongs();
   }
 
   /// Signs out of Supabase and returns to the Sign in page.
@@ -166,11 +191,21 @@ class AppState extends ChangeNotifier {
   }
 
   /// Turns a saved row back into a [Song]. Built-in songs come from the
-  /// sample list; online songs get their lyrics fetched again.
+  /// sample list; songs from your database are looked up in the `songs`
+  /// table; online songs get their lyrics fetched again.
   Future<Song> _songFromSaved(SavedSong s) async {
     if (s.source == 'sample') {
       final match = allSongs.where((x) => x.id == s.songId).firstOrNull;
       if (match != null) return match;
+    } else if (s.source == 'supabase') {
+      final cached = dbSongs.where((x) => x.id == s.songId).firstOrNull;
+      if (cached != null) return cached;
+      try {
+        final row = await SongRepository.fetchById(s.songId);
+        if (row != null) return Song.fromRow(row);
+      } catch (_) {
+        // fall through to the placeholder below
+      }
     } else {
       try {
         final song = await _lyricsService.loadSong(
@@ -391,8 +426,12 @@ class AppState extends ChangeNotifier {
 
   int get singerCount => playlist.map((s) => s.singer).toSet().length;
 
-  List<Song> get candidates =>
-      allSongs.where((s) => !playlist.any((p) => p.id == s.id)).toList();
+  /// Songs that can still be added to the playlist: your database songs
+  /// first, then the built-in ones.
+  List<Song> get candidates => [
+    ...dbSongs,
+    ...allSongs,
+  ].where((s) => !playlist.any((p) => p.id == s.id)).toList();
 
   AppRoute get parentRoute => switch (_route) {
     AppRoute.signIn => AppRoute.signIn,

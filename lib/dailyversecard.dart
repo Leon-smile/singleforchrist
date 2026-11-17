@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_tts/flutter_tts.dart';
 import 'package:mobileappsfc/Theme.dart';
 import 'package:mobileappsfc/common.dart';
 import 'package:mobileappsfc/service/verseservice.dart';
@@ -25,6 +26,119 @@ const _months = <String>[
 bool _sameDay(DateTime a, DateTime b) =>
     a.year == b.year && a.month == b.month && a.day == b.day;
 
+/// Reads a verse out loud with the phone's text-to-speech engine, picking the
+/// best English voice it can find (network / neural / enhanced voices first).
+class _VerseSpeaker {
+  final FlutterTts _tts = FlutterTts();
+  Future<void>? _setup;
+
+  void Function(bool speaking)? onChanged;
+  void Function()? onError;
+
+  Future<void> _init() => _setup ??= _configure();
+
+  Future<void> _configure() async {
+    _tts.setStartHandler(() => onChanged?.call(true));
+    _tts.setCompletionHandler(() => onChanged?.call(false));
+    _tts.setCancelHandler(() => onChanged?.call(false));
+    _tts.setErrorHandler((_) {
+      onChanged?.call(false);
+      onError?.call();
+    });
+
+    try {
+      await _tts.setLanguage('en-US');
+      await _tts.setSpeechRate(0.42); // calm, clear reading pace
+      await _tts.setPitch(1.0);
+      await _tts.setVolume(1.0);
+      await _pickBestVoice();
+    } catch (_) {
+      // Fall back to the engine's default voice.
+    }
+  }
+
+  Future<void> _pickBestVoice() async {
+    final voices = await _tts.getVoices;
+    if (voices is! List) return;
+
+    Map? best;
+    var bestScore = -1;
+    for (final v in voices) {
+      if (v is! Map) continue;
+      final name = '${v['name']}'.toLowerCase();
+      final locale = '${v['locale']}'.toLowerCase().replaceAll('_', '-');
+      if (!locale.startsWith('en')) continue;
+
+      var score = 0;
+      if (locale == 'en-us') {
+        score += 3;
+      } else if (locale == 'en-gb' || locale == 'en-au') {
+        score += 2;
+      } else {
+        score += 1;
+      }
+      // Higher quality voices usually say so in their name.
+      if (name.contains('network')) score += 10; // Android online voices
+      if (name.contains('neural') || name.contains('natural')) score += 9;
+      if (name.contains('premium') || name.contains('enhanced')) score += 8;
+      if (name.contains('compact') || name.contains('espeak')) score -= 5;
+
+      if (score > bestScore) {
+        bestScore = score;
+        best = v;
+      }
+    }
+
+    if (best != null) {
+      await _tts.setVoice({
+        'name': '${best['name']}',
+        'locale': '${best['locale']}',
+      });
+    }
+  }
+
+  Future<void> speak(String text) async {
+    await _init();
+    await _tts.stop();
+    await _tts.speak(text);
+  }
+
+  Future<void> stop() async {
+    if (_setup == null) return;
+    await _tts.stop();
+    onChanged?.call(false);
+  }
+
+  Future<void> dispose() async {
+    onChanged = null;
+    onError = null;
+    if (_setup != null) await _tts.stop();
+  }
+}
+
+/// "Colossians 3:23" -> "Colossians chapter 3, verse 23" so it is read well.
+String _spokenReference(String ref) {
+  final m = RegExp(
+    r'^(.*?)\s+(\d+):(\d+)(?:\s*[-–]\s*(\d+))?$',
+  ).firstMatch(ref);
+  if (m == null) return ref;
+  final book = m.group(1)!;
+  final chapter = m.group(2)!;
+  final from = m.group(3)!;
+  final to = m.group(4);
+  return to == null
+      ? '$book chapter $chapter, verse $from'
+      : '$book chapter $chapter, verses $from to $to';
+}
+
+String _spokenVerse(Verse v) {
+  final body = v.text
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim()
+      .replaceAll(RegExp(r'[;,:\s]+$'), '');
+  return '$body. ${_spokenReference(v.reference)}.';
+}
+
 /// "Verse for today" card on the home page.
 ///
 /// Shows one Bible verse per day. It switches to the next verse at local
@@ -40,15 +154,28 @@ class DailyVerseCard extends StatefulWidget {
 class _DailyVerseCardState extends State<DailyVerseCard>
     with WidgetsBindingObserver {
   final _service = VerseService();
+  final _speaker = _VerseSpeaker();
 
   late DateTime _day;
   late Future<Verse> _future;
   Timer? _midnight;
   bool _saved = false;
+  bool _speaking = false;
 
   @override
   void initState() {
     super.initState();
+    _speaker.onChanged = (speaking) {
+      if (mounted) setState(() => _speaking = speaking);
+    };
+    _speaker.onError = () {
+      if (mounted) {
+        showToast(
+          context,
+          'Could not read aloud. Check text-to-speech settings.',
+        );
+      }
+    };
     WidgetsBinding.instance.addObserver(this);
     _load();
     _scheduleMidnight();
@@ -58,10 +185,12 @@ class _DailyVerseCardState extends State<DailyVerseCard>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _midnight?.cancel();
+    _speaker.dispose();
     super.dispose();
   }
 
   void _load() {
+    _speaker.stop(); // a new day means a new verse
     _day = DateTime.now();
     _saved = false;
     _future = _service.verseFor(_day);
@@ -91,6 +220,14 @@ class _DailyVerseCardState extends State<DailyVerseCard>
   }
 
   // ---------------------------------------------------------------- actions
+
+  Future<void> _toggleListen(Verse v) async {
+    if (_speaking) {
+      await _speaker.stop();
+    } else {
+      await _speaker.speak(_spokenVerse(v));
+    }
+  }
 
   Future<void> _share(Verse v) async {
     final text =
@@ -196,8 +333,8 @@ class _DailyVerseCardState extends State<DailyVerseCard>
               return _VerseBody(
                 verse: v,
                 saved: _saved,
-                onListen: () =>
-                    showToast(context, 'Audio reading is coming soon'),
+                speaking: _speaking,
+                onListen: () => _toggleListen(v),
                 onReflect: () => _reflect(v),
                 onSave: () {
                   setState(() => _saved = !_saved);
@@ -240,6 +377,7 @@ class _Loading extends StatelessWidget {
 class _VerseBody extends StatelessWidget {
   final Verse verse;
   final bool saved;
+  final bool speaking;
   final VoidCallback onListen;
   final VoidCallback onReflect;
   final VoidCallback onSave;
@@ -248,6 +386,7 @@ class _VerseBody extends StatelessWidget {
   const _VerseBody({
     required this.verse,
     required this.saved,
+    required this.speaking,
     required this.onListen,
     required this.onReflect,
     required this.onSave,
@@ -292,8 +431,8 @@ class _VerseBody extends StatelessWidget {
         Row(
           children: [
             _TextAction(
-              icon: Icons.play_arrow_rounded,
-              label: 'Listen',
+              icon: speaking ? Icons.stop_rounded : Icons.play_arrow_rounded,
+              label: speaking ? 'Stop' : 'Listen',
               onTap: onListen,
             ),
             const SizedBox(width: 6),
