@@ -7,7 +7,6 @@ import 'package:mobileappsfc/artwork.dart';
 import 'package:mobileappsfc/common.dart';
 import 'package:mobileappsfc/dailyversecard.dart';
 import 'package:mobileappsfc/song.dart';
-import 'package:mobileappsfc/songs.dart';
 
 enum HomeFilter { all, singers, lyrics }
 
@@ -41,9 +40,10 @@ class _HomePageState extends State<HomePage> {
   bool get _showLyrics => _filter != HomeFilter.singers;
   bool get _showSingers => _filter != HomeFilter.lyrics;
 
+  /// Songs come from the Supabase `songs` table (AppState.dbSongs).
   List<Song> _songs(AppState state) {
     final q = state.search.text.trim().toLowerCase();
-    return allSongs
+    return state.dbSongs
         .where(
           (s) =>
               q.isEmpty ||
@@ -53,9 +53,10 @@ class _HomePageState extends State<HomePage> {
         .toList();
   }
 
+  /// Singers are built from those songs (AppState.dbSingers).
   List<Singer> _singers(AppState state) {
     final q = state.search.text.trim().toLowerCase();
-    return allSingers
+    return state.dbSingers
         .where((s) => q.isEmpty || s.name.toLowerCase().contains(q))
         .toList();
   }
@@ -81,6 +82,33 @@ class _HomePageState extends State<HomePage> {
             ),
           ),
       ],
+    );
+  }
+
+  /// Shown when there is nothing to list (loading, error, no songs yet, or
+  /// no match for the current search).
+  Widget _emptyNote(AppState state) {
+    if (state.dbLoading) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 48),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+    final searching = state.search.text.trim().isNotEmpty;
+    final text =
+        state.dbError ??
+        (searching
+            ? 'No songs match your search'
+            : 'No songs yet. Add one from Your library.');
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 48),
+      child: Center(
+        child: Text(
+          text,
+          textAlign: TextAlign.center,
+          style: const TextStyle(color: AppColors.muted),
+        ),
+      ),
     );
   }
 
@@ -129,6 +157,7 @@ class _HomePageState extends State<HomePage> {
           const SizedBox(height: 24),
         ] else
           const SizedBox(height: 8),
+        if (songs.isEmpty && singers.isEmpty) _emptyNote(state),
         if (_showLyrics && songs.isNotEmpty) ...[
           const Text(
             'Recently read',
@@ -236,6 +265,7 @@ class _HomePageState extends State<HomePage> {
             ),
             const SizedBox(height: 24),
           ],
+          if (songs.isEmpty && singers.isEmpty) _emptyNote(state),
           if (_showLyrics && songs.isNotEmpty) ...[
             GridView.builder(
               shrinkWrap: true,
@@ -305,7 +335,8 @@ class _HomePageState extends State<HomePage> {
             ),
             const SizedBox(height: 24),
             _DiscoverBanner(
-              singer: allSingers[2],
+              // A singer beyond the five shown above, else the last one.
+              singer: singers.length > 5 ? singers[5] : singers.last,
               onTap: () => showToast(context, 'Find your next favorite'),
             ),
           ],

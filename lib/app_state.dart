@@ -131,6 +131,25 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Singers built from [dbSongs]: one entry per singer, with their first
+  /// few song titles as the highlights and the first song's artwork colors.
+  List<Singer> get dbSingers {
+    final bySinger = <String, List<Song>>{};
+    for (final s in dbSongs) {
+      final name = s.singer.trim();
+      if (name.isEmpty) continue;
+      (bySinger[name] ??= []).add(s);
+    }
+    return [
+      for (final e in bySinger.entries)
+        Singer(
+          name: e.key,
+          highlights: e.value.take(3).map((s) => s.title).join(', '),
+          colors: e.value.first.colors,
+        ),
+    ];
+  }
+
   static const userName = 'Alex';
   static const playlistName = 'After hours';
   static const playlistTagline = 'Words for late nights. Ready to sing.';
@@ -157,6 +176,8 @@ class AppState extends ChangeNotifier {
     _playlistId = null;
     shareToken = null;
     playlist.clear();
+    dbSongs = [];
+    recents.clear();
     go(AppRoute.signIn);
   }
 
@@ -190,14 +211,11 @@ class AppState extends ChangeNotifier {
     }();
   }
 
-  /// Turns a saved row back into a [Song]. Built-in songs come from the
-  /// sample list; songs from your database are looked up in the `songs`
-  /// table; online songs get their lyrics fetched again.
+  /// Turns a saved row back into a [Song]. Songs from your database are
+  /// looked up in the `songs` table; online songs get their lyrics fetched
+  /// again.
   Future<Song> _songFromSaved(SavedSong s) async {
-    if (s.source == 'sample') {
-      final match = allSongs.where((x) => x.id == s.songId).firstOrNull;
-      if (match != null) return match;
-    } else if (s.source == 'supabase') {
+    if (s.source == 'supabase') {
       final cached = dbSongs.where((x) => x.id == s.songId).firstOrNull;
       if (cached != null) return cached;
       try {
@@ -237,7 +255,10 @@ class AppState extends ChangeNotifier {
     try {
       final id = await _ensurePlaylistId();
       final saved = await PlaylistService.songs(id);
-      final songs = await Future.wait(saved.map(_songFromSaved));
+      // Rows saved from the old built-in sample songs no longer exist.
+      final songs = await Future.wait(
+        saved.where((s) => s.source != 'sample').map(_songFromSaved),
+      );
       playlist
         ..clear()
         ..addAll(songs);
@@ -288,6 +309,7 @@ class AppState extends ChangeNotifier {
   Future<int> copySharedToPlaylist(SharedPlaylist shared) async {
     var added = 0;
     for (final saved in shared.songs) {
+      if (saved.source == 'sample') continue;
       final song = await _songFromSaved(saved);
       if (isInPlaylist(song)) continue;
       addToPlaylist(song);
@@ -304,7 +326,18 @@ class AppState extends ChangeNotifier {
   // ------------------------------------------------------- lyrics reader
 
   Song? _currentSong;
-  Song get currentSong => _currentSong ?? allSongs.first;
+
+  /// Shown only if the reader is somehow opened before a song is picked.
+  static const _noSong = Song(
+    id: '',
+    title: 'No song selected',
+    singer: '',
+    lines: [],
+    colors: playlistColors,
+    minutes: 1,
+  );
+
+  Song get currentSong => _currentSong ?? dbSongs.firstOrNull ?? _noSong;
 
   /// Where the lyrics page was opened from (so Back returns there).
   AppRoute _lyricsFrom = AppRoute.home;
@@ -321,26 +354,8 @@ class AppState extends ChangeNotifier {
 
   // ------------------------------------------------------- recent searches
 
-  final List<RecentSearch> recents = [
-    const RecentSearch(
-      kind: 'song',
-      refId: 'slow-pulse',
-      title: 'Slow pulse',
-      subtitle: 'Song · Kai Ren',
-    ),
-    const RecentSearch(
-      kind: 'playlist',
-      refId: playlistName,
-      title: playlistName,
-      subtitle: 'Your playlist',
-    ),
-    const RecentSearch(
-      kind: 'singer',
-      refId: 'Zara Sloan',
-      title: 'Zara Sloan',
-      subtitle: 'Singer · 2 lyrics saved',
-    ),
-  ];
+  /// Starts empty; filled as the user searches and opens things.
+  final List<RecentSearch> recents = [];
 
   void addRecent(RecentSearch item) {
     recents.removeWhere((r) => r.kind == item.kind && r.refId == item.refId);
@@ -383,15 +398,16 @@ class AppState extends ChangeNotifier {
 
   /// Opens the first available song by this singer.
   bool openSinger(Singer singer) {
-    final songs = allSongs.where((s) => s.singer == singer.name).toList();
+    final songs = dbSongs.where((s) => s.singer.trim() == singer.name).toList();
     if (songs.isEmpty) return false;
     openSong(songs.first);
     return true;
   }
 
   Song nextSongAfter(Song song) {
-    final i = allSongs.indexWhere((s) => s.id == song.id);
-    return allSongs[(i + 1) % allSongs.length];
+    if (dbSongs.isEmpty) return song;
+    final i = dbSongs.indexWhere((s) => s.id == song.id);
+    return dbSongs[(i + 1) % dbSongs.length];
   }
 
   void changeFontSize(double delta) {
@@ -426,12 +442,10 @@ class AppState extends ChangeNotifier {
 
   int get singerCount => playlist.map((s) => s.singer).toSet().length;
 
-  /// Songs that can still be added to the playlist: your database songs
-  /// first, then the built-in ones.
-  List<Song> get candidates => [
-    ...dbSongs,
-    ...allSongs,
-  ].where((s) => !playlist.any((p) => p.id == s.id)).toList();
+  /// Songs that can still be added to the playlist: the songs in your
+  /// database that are not in it yet.
+  List<Song> get candidates =>
+      dbSongs.where((s) => !playlist.any((p) => p.id == s.id)).toList();
 
   AppRoute get parentRoute => switch (_route) {
     AppRoute.signIn => AppRoute.signIn,
@@ -501,7 +515,7 @@ class AppState extends ChangeNotifier {
   Future<String> downloadAll() => saveLyrics(
     fileName: 'lyricflow-lyrics',
     heading: 'LyricFlow lyrics',
-    songs: allSongs,
+    songs: dbSongs,
   );
 
   @override
