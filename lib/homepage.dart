@@ -6,6 +6,7 @@ import 'package:mobileappsfc/app_state.dart';
 import 'package:mobileappsfc/artwork.dart';
 import 'package:mobileappsfc/common.dart';
 import 'package:mobileappsfc/dailyversecard.dart';
+import 'package:mobileappsfc/service/NotificationService.dart';
 import 'package:mobileappsfc/song.dart';
 
 enum HomeFilter { all, singers, lyrics }
@@ -36,6 +37,89 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   HomeFilter _filter = HomeFilter.all;
+  bool _reminderOn = false;
+
+  @override
+  void initState() {
+    super.initState();
+    NotificationService.isEnabled().then((on) {
+      if (mounted) setState(() => _reminderOn = on);
+    });
+  }
+
+  /// Turns the daily 3 PM prayer reminder on or off.
+  Future<void> _setReminder(bool on) async {
+    if (!NotificationService.supported) {
+      showToast(context, 'Reminders work on the Android and iPhone app');
+      return;
+    }
+    try {
+      if (on) {
+        final granted = await NotificationService.enable();
+        if (!mounted) return;
+        if (!granted) {
+          showToast(
+            context,
+            'Allow notifications in your phone settings to get the reminder',
+          );
+          return;
+        }
+        showToast(context, 'Prayer reminder set for 3:00 PM every day');
+      } else {
+        await NotificationService.disable();
+        if (!mounted) return;
+        showToast(context, 'Prayer reminder turned off');
+      }
+      setState(() => _reminderOn = on);
+    } catch (e) {
+      debugPrint('Reminder error: $e');
+      if (mounted) showToast(context, "Couldn't change the reminder");
+    }
+  }
+
+  void _openNotificationSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppColors.surfaceHigh,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (_, setSheet) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Notifications',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 8),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text("3 o'clock prayer reminder"),
+                  subtitle: const Text(
+                    'Every day at 3:00 PM. Works offline, no Wi-Fi needed.',
+                    style: TextStyle(color: AppColors.muted, fontSize: 12),
+                  ),
+                  value: _reminderOn,
+                  onChanged: (on) async {
+                    await _setReminder(on);
+                    if (sheetContext.mounted) setSheet(() {});
+                  },
+                ),
+                const SizedBox(height: 4),
+                OutlinedButton.icon(
+                  onPressed: NotificationService.sendTest,
+                  icon: const Icon(Icons.notifications_active_outlined),
+                  label: const Text('Send a test notification'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 
   bool get _showLyrics => _filter != HomeFilter.singers;
   bool get _showSingers => _filter != HomeFilter.lyrics;
@@ -140,8 +224,14 @@ class _HomePageState extends State<HomePage> {
               ),
             ),
             IconButton(
-              onPressed: () => showToast(context, 'Notifications'),
-              icon: const Icon(Icons.notifications_none_rounded),
+              tooltip: 'Notifications',
+              onPressed: _openNotificationSheet,
+              icon: Icon(
+                _reminderOn
+                    ? Icons.notifications_active_rounded
+                    : Icons.notifications_none_rounded,
+                color: _reminderOn ? AppColors.accent : null,
+              ),
             ),
             IconButton(
               onPressed: () => showToast(context, 'History'),

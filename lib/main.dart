@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mobileappsfc/Theme.dart';
 import 'package:mobileappsfc/app_state.dart';
+import 'package:mobileappsfc/service/NotificationService.dart';
 import 'package:mobileappsfc/service/authservice.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -14,6 +15,7 @@ const _supabaseAnonKey =
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await NotificationService.init();
   await Supabase.initialize(url: _supabaseUrl, anonKey: _supabaseAnonKey);
   runApp(const LyricFlowApp());
 }
