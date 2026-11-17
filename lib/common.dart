@@ -412,7 +412,7 @@ class PlaylistHero extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    AppState.playlistName,
+                    state.playlistName,
                     style: TextStyle(
                       fontSize: titleSize,
                       fontWeight: FontWeight.w800,
@@ -660,7 +660,7 @@ class Sidebar extends StatelessWidget {
                   onTap: () => showToast(context, 'Saved lyrics'),
                 ),
                 LibraryRow(
-                  title: AppState.playlistName,
+                  title: state.playlistName,
                   subtitle: 'Playlist · ${state.playlist.length} lyrics',
                   colors: playlistColors,
                   selected: playlistSelected,

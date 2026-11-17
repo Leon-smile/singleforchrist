@@ -378,13 +378,13 @@ class _AddButton extends StatelessWidget {
       expand: expand,
       icon: added ? Icons.check_rounded : Icons.add_rounded,
       label: added
-          ? 'In ${AppState.playlistName}'
-          : 'Add to ${AppState.playlistName}',
+          ? 'In ${state.playlistName}'
+          : 'Add to ${state.playlistName}',
       onTap: added
           ? null
           : () {
               state.addToPlaylist(song);
-              showToast(context, 'Added to ${AppState.playlistName}');
+              showToast(context, 'Added to ${state.playlistName}');
             },
     );
   }

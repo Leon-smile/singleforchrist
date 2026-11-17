@@ -125,7 +125,7 @@ class LibraryPage extends StatelessWidget {
           Breadcrumb(
             crumbs: [
               Crumb('Your library', () => state.go(AppRoute.library)),
-              const Crumb(AppState.playlistName),
+              Crumb(state.playlistName),
             ],
           ),
           const SizedBox(height: 14),

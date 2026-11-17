@@ -54,7 +54,7 @@ class _AddLyricsPageState extends State<AddLyricsPage> {
     final n = state.addSelected();
     showToast(
       context,
-      'Added $n ${n == 1 ? 'lyric' : 'lyrics'} to ${AppState.playlistName}',
+      'Added $n ${n == 1 ? 'lyric' : 'lyrics'} to ${state.playlistName}',
     );
     state.go(AppRoute.library);
   }
@@ -155,8 +155,8 @@ class _AddLyricsPageState extends State<AddLyricsPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Already in ${AppState.playlistName}',
+        Text(
+          'Already in ${state.playlistName}',
           style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
         ),
         const SizedBox(height: 4),
@@ -234,7 +234,7 @@ class _AddLyricsPageState extends State<AddLyricsPage> {
               const MobileTopBar(title: 'Add lyrics'),
               const SizedBox(height: 20),
               const Text(
-                'FOR AFTER HOURS',
+                'FOR PLAYLIST',
                 style: TextStyle(
                   color: AppColors.accent,
                   fontSize: 10,
@@ -296,7 +296,7 @@ class _AddLyricsPageState extends State<AddLyricsPage> {
                 label: count == 0
                     ? 'Select lyrics to add'
                     : 'Add $count ${count == 1 ? 'lyric' : 'lyrics'} to '
-                          '${AppState.playlistName}',
+                          '${state.playlistName}',
                 onTap: count == 0 ? null : () => _add(state),
               ),
             ],
@@ -323,7 +323,7 @@ class _AddLyricsPageState extends State<AddLyricsPage> {
           Breadcrumb(
             crumbs: [
               Crumb('Your library', () => state.go(AppRoute.library)),
-              Crumb(AppState.playlistName, () => state.go(AppRoute.library)),
+              Crumb(state.playlistName, () => state.go(AppRoute.library)),
               const Crumb('Add lyrics'),
             ],
           ),
@@ -334,7 +334,7 @@ class _AddLyricsPageState extends State<AddLyricsPage> {
           ),
           const SizedBox(height: 6),
           const Text(
-            'Add lyrics to After hours. Choose a few favorites and make the '
+            'Add lyrics to Playlist. Choose a few favorites and make the '
             'night your own.',
             style: TextStyle(color: AppColors.muted, fontSize: 13),
           ),
@@ -577,8 +577,8 @@ class _SelectionPanel extends StatelessWidget {
                         letterSpacing: 0.5,
                       ),
                     ),
-                    const Text(
-                      AppState.playlistName,
+                    Text(
+                      state.playlistName,
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w700,

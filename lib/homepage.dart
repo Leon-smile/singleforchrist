@@ -233,10 +233,6 @@ class _HomePageState extends State<HomePage> {
                 color: _reminderOn ? AppColors.accent : null,
               ),
             ),
-            IconButton(
-              onPressed: () => showToast(context, 'History'),
-              icon: const Icon(Icons.history_rounded),
-            ),
           ],
         ),
         const SizedBox(height: 16),

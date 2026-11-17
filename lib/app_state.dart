@@ -10,6 +10,7 @@ import 'package:mobileappsfc/service/playlistservice.dart';
 import 'package:mobileappsfc/song.dart';
 import 'package:mobileappsfc/song_repository.dart';
 import 'package:mobileappsfc/songs.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show Supabase;
 
@@ -188,7 +189,53 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  static const playlistName = 'After hours';
+  /// Shown until the user names their playlist.
+  static const defaultPlaylistName = 'My playlist';
+
+  /// Internal name of the playlist row in Supabase. Users never see it; it
+  /// only keeps already-saved playlists findable. Remove it once the name
+  /// itself is stored in Supabase.
+  static const _dbPlaylistName = 'After hours';
+
+  static const maxPlaylistNameLength = 30;
+
+  /// The playlist's name, chosen by the user (see [renamePlaylist]).
+  String playlistName = defaultPlaylistName;
+
+  String get _nameKey =>
+      'playlist_name_${Supabase.instance.client.auth.currentUser?.id ?? 'guest'}';
+
+  Future<void> _loadPlaylistName() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final saved = prefs.getString(_nameKey)?.trim() ?? '';
+      if (saved.isNotEmpty && saved != playlistName) {
+        playlistName = saved;
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('Could not load the playlist name: $e');
+    }
+  }
+
+  /// Gives the playlist a new name and remembers it on this device.
+  Future<void> renamePlaylist(String newName) async {
+    var name = newName.trim();
+    if (name.isEmpty) return;
+    if (name.length > maxPlaylistNameLength) {
+      name = name.substring(0, maxPlaylistNameLength).trim();
+    }
+    if (name == playlistName) return;
+    playlistName = name;
+    notifyListeners();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_nameKey, name);
+    } catch (e) {
+      debugPrint('Could not save the playlist name: $e');
+    }
+  }
+
   static const playlistTagline = 'Words for late nights. Ready to sing.';
   static const shareLink = 'sfclyrics.app/p/after-hours-a7k2';
 
@@ -204,6 +251,7 @@ class AppState extends ChangeNotifier {
   void signIn() {
     go(AppRoute.home);
     loadProfile();
+    _loadPlaylistName();
     loadPlaylist();
     loadDbSongs();
   }
@@ -215,6 +263,7 @@ class AppState extends ChangeNotifier {
     shareToken = null;
     playlist.clear();
     dbSongs = [];
+    playlistName = defaultPlaylistName;
     recents.clear();
     go(AppRoute.signIn);
   }
@@ -239,7 +288,7 @@ class AppState extends ChangeNotifier {
     if (known != null) return Future.value(known);
     return _ensuring ??= () async {
       try {
-        final info = await PlaylistService.ensurePlaylist(playlistName);
+        final info = await PlaylistService.ensurePlaylist(_dbPlaylistName);
         _playlistId = info.id;
         shareToken = info.shareToken;
         return info.id;

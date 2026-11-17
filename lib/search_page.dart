@@ -157,10 +157,10 @@ class _SearchPageState extends State<SearchPage> {
 
   void _openPlaylist(AppState state) {
     state.addRecent(
-      const RecentSearch(
+      RecentSearch(
         kind: 'playlist',
-        refId: AppState.playlistName,
-        title: AppState.playlistName,
+        refId: state.playlistName,
+        title: state.playlistName,
         subtitle: 'Your playlist',
       ),
     );
@@ -498,7 +498,7 @@ class _SearchPageState extends State<SearchPage> {
               .toList()
         : <Singer>[];
     final playlistHit =
-        showPlaylists && AppState.playlistName.toLowerCase().contains(q);
+        showPlaylists && state.playlistName.toLowerCase().contains(q);
     final verses = showVerses
         ? [
             for (final s in pool)
@@ -650,7 +650,7 @@ class _SearchPageState extends State<SearchPage> {
       if (playlistHit) ...[
         heading('Playlists'),
         _ResultRow(
-          title: AppState.playlistName,
+          title: state.playlistName,
           subtitle: 'Your playlist · ${state.playlist.length} lyrics',
           colors: playlistColors,
           onTap: () => _openPlaylist(state),

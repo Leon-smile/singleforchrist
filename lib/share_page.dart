@@ -114,7 +114,7 @@ class SharePage extends StatelessWidget {
           Breadcrumb(
             crumbs: [
               Crumb('Your library', () => state.go(AppRoute.library)),
-              Crumb(AppState.playlistName, () => state.go(AppRoute.library)),
+              Crumb(state.playlistName, () => state.go(AppRoute.library)),
               const Crumb('Share playlist'),
             ],
           ),
@@ -125,7 +125,7 @@ class SharePage extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           const Text(
-            'Give a friend a code to open After hours in the app, or send the '
+            'Give a friend a code to open Playlist in the app, or send the '
             'lyrics through any app on your device.',
             style: TextStyle(color: AppColors.muted, fontSize: 13),
           ),
@@ -177,7 +177,7 @@ class SharePage extends StatelessWidget {
                             color: AppColors.muted,
                           ),
                           label: const Text(
-                            'Back to After hours',
+                            'Back to Playlist',
                             style: TextStyle(
                               color: AppColors.muted,
                               fontSize: 11,
@@ -559,8 +559,8 @@ class _SharedSheetState extends State<_SharedSheet> {
       showToast(
         context,
         added == 0
-            ? 'Those lyrics are already in ${AppState.playlistName}'
-            : 'Added $added to ${AppState.playlistName}',
+            ? 'Those lyrics are already in ${widget.state.playlistName}'
+            : 'Added $added to ${widget.state.playlistName}',
       );
     } catch (e) {
       debugPrint('Copy shared error: $e');
@@ -656,7 +656,7 @@ class _SharedSheetState extends State<_SharedSheet> {
                 icon: _busy ? null : Icons.add_rounded,
                 label: _busy
                     ? 'Adding...'
-                    : 'Add all to ${AppState.playlistName}',
+                    : 'Add all to ${widget.state.playlistName}',
                 onTap: (_busy || songs.isEmpty) ? null : _addAll,
               ),
             ],
@@ -679,7 +679,7 @@ class _ShareActions extends StatelessWidget {
   Widget build(BuildContext context) {
     final state = AppScope.of(context);
     final songs = state.playlist;
-    const heading = AppState.playlistName;
+    final heading = state.playlistName;
 
     void act(BuildContext ctx, Future<String> Function() action) {
       if (songs.isEmpty) {
@@ -818,7 +818,7 @@ class _PrivacyNote extends StatelessWidget {
         SizedBox(width: 8),
         Expanded(
           child: Text(
-            'Your library stays private. Only After hours can be opened, and '
+            'Your library stays private. Only Playlist can be opened, and '
             'only by people who have your code.',
             style: TextStyle(color: AppColors.muted, fontSize: 11),
           ),
