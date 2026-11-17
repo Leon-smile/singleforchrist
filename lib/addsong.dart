@@ -466,14 +466,18 @@ class _AddSongPageState extends State<AddSongPage> {
                   ),
                 ),
                 const SizedBox(width: 6),
-                InkWell(
-                  onTap: onUnitTap,
-                  child: Text(
-                    unit,
-                    style: const TextStyle(
-                      color: AppColors.accent,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
+                Flexible(
+                  child: InkWell(
+                    onTap: onUnitTap,
+                    child: Text(
+                      unit,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppColors.accent,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
                 ),
@@ -536,7 +540,10 @@ class _AddSongPageState extends State<AddSongPage> {
                 padding: const EdgeInsets.symmetric(vertical: 6),
                 minimumSize: const Size(0, 30),
               ),
-              child: const Text('Tap Tempo', style: TextStyle(fontSize: 11)),
+              child: const FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text('Tap Tempo', style: TextStyle(fontSize: 11)),
+              ),
             ),
           ),
         ),
@@ -716,28 +723,40 @@ class _AddSongPageState extends State<AddSongPage> {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             child: Row(
               children: [
-                InkWell(
-                  onTap: _convert,
-                  child: const Row(
-                    children: [
-                      Icon(
-                        Icons.auto_fix_high_rounded,
-                        size: 16,
-                        color: AppColors.accent,
+                // Expanded + ellipsis so a long label can't push the row
+                // past the right edge on narrow screens.
+                Expanded(
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: InkWell(
+                      onTap: _convert,
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.auto_fix_high_rounded,
+                            size: 16,
+                            color: AppColors.accent,
+                          ),
+                          SizedBox(width: 8),
+                          Flexible(
+                            child: Text(
+                              'Convert pasted chart to ChordPro',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: AppColors.accent,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                      SizedBox(width: 8),
-                      Text(
-                        'Convert pasted chart to ChordPro',
-                        style: TextStyle(
-                          color: AppColors.accent,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
                 ),
-                const Spacer(),
+                const SizedBox(width: 8),
                 TextButton(
                   onPressed: _autoFormat,
                   style: TextButton.styleFrom(

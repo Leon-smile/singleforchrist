@@ -41,14 +41,18 @@ class LibraryPage extends StatelessWidget {
         const SizedBox(height: 16),
         const PlaylistHero(height: 190, titleSize: 40),
         const SizedBox(height: 16),
-        Row(
+        // Wrap instead of Row so the buttons flow onto a second line on
+        // narrow screens instead of overflowing the right edge.
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             PrimaryButton(
               icon: Icons.add_rounded,
               label: 'Add lyrics',
               onTap: () => state.go(AppRoute.addLyrics),
             ),
-            const SizedBox(width: 8),
             OutlineAction(
               icon: Icons.library_music_outlined,
               tooltip: 'Add song with chords',
@@ -56,19 +60,16 @@ class LibraryPage extends StatelessWidget {
                   .push(MaterialPageRoute(builder: (_) => const AddSongPage()))
                   .then((_) => state.loadDbSongs()),
             ),
-            const SizedBox(width: 8),
             OutlineAction(
               icon: Icons.share_outlined,
               label: 'Share',
               onTap: () => state.go(AppRoute.share),
             ),
-            const SizedBox(width: 8),
             OutlineAction(
               icon: Icons.download_outlined,
               tooltip: 'Download playlist',
               onTap: () => runAction(context, state.downloadPlaylist),
             ),
-            const Spacer(),
             const Icon(
               Icons.lock_outline_rounded,
               size: 18,
@@ -130,14 +131,16 @@ class LibraryPage extends StatelessWidget {
           const SizedBox(height: 14),
           const PlaylistHero(height: 230, titleSize: 56),
           const SizedBox(height: 16),
-          Row(
+          Wrap(
+            spacing: 12,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               PrimaryButton(
                 icon: Icons.add_rounded,
                 label: 'Add lyrics',
                 onTap: () => state.go(AppRoute.addLyrics),
               ),
-              const SizedBox(width: 12),
               OutlineAction(
                 icon: Icons.library_music_outlined,
                 label: 'Add song with chords',
@@ -147,28 +150,30 @@ class LibraryPage extends StatelessWidget {
                     )
                     .then((_) => state.loadDbSongs()),
               ),
-              const SizedBox(width: 12),
               OutlineAction(
                 icon: Icons.share_outlined,
                 label: 'Share playlist',
                 onTap: () => state.go(AppRoute.share),
               ),
-              const SizedBox(width: 12),
               OutlineAction(
                 icon: Icons.download_outlined,
                 label: 'Download',
                 onTap: () => runAction(context, state.downloadPlaylist),
               ),
-              const Spacer(),
-              const Icon(
-                Icons.lock_outline_rounded,
-                size: 16,
-                color: AppColors.muted,
-              ),
-              const SizedBox(width: 6),
-              const Text(
-                'Only you · Share to invite others',
-                style: TextStyle(color: AppColors.muted, fontSize: 11),
+              const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.lock_outline_rounded,
+                    size: 16,
+                    color: AppColors.muted,
+                  ),
+                  SizedBox(width: 6),
+                  Text(
+                    'Only you · Share to invite others',
+                    style: TextStyle(color: AppColors.muted, fontSize: 11),
+                  ),
+                ],
               ),
             ],
           ),
