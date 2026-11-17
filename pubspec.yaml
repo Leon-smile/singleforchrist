@@ -37,7 +37,7 @@ flutter:
   assets:
     - assets/sfc_icon.png
     - assets/sfc_lockup.png
-
+    - assets/googlelogo.png
 # App icon configuration (must be at the root level)
 flutter_launcher_icons:
   android: true

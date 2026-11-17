@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mobileappsfc/Theme.dart';
 import 'package:mobileappsfc/app_state.dart';
+import 'package:mobileappsfc/google_logo.dart';
 import 'package:mobileappsfc/service/authservice.dart';
 import 'package:mobileappsfc/common.dart';
 import 'package:supabase_flutter/supabase_flutter.dart'
@@ -795,8 +796,7 @@ class _OrDivider extends StatelessWidget {
   }
 }
 
-/// "Continue with Google". Swap the "G" for Google's official logo asset
-/// before publishing (see Google's branding guidelines).
+/// "Continue with Google" button using the official Google "G" logo.
 class _GoogleButton extends StatelessWidget {
   const _GoogleButton({required this.loading, required this.onPressed});
   final bool loading;
@@ -827,23 +827,7 @@ class _GoogleButton extends StatelessWidget {
                 ),
               )
             else
-              Container(
-                width: 22,
-                height: 22,
-                alignment: Alignment.center,
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  shape: BoxShape.circle,
-                ),
-                child: const Text(
-                  'G',
-                  style: TextStyle(
-                    color: Color(0xFF4285F4),
-                    fontSize: 14,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ),
+              const GoogleLogo(size: 22),
             const SizedBox(width: 10),
             const Text(
               'CONTINUE WITH GOOGLE',
